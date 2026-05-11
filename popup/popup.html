@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SAML Tracer</title>
+  <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body class="panel">
+  <header>
+    <h1>SAML Tracer</h1>
+    <div class="view-toggle">
+      <button id="view-saml" class="active">SAML</button>
+      <button id="view-network">All Traffic</button>
+    </div>
+    <span id="status" class="muted"></span>
+    <div class="actions">
+      <button id="export">Export</button>
+      <button id="open-viewer" class="ghost">Import</button>
+      <button id="open-jwt" class="ghost">JWT</button>
+      <button id="clear" class="ghost">Clear</button>
+    </div>
+  </header>
+  <div class="layout">
+    <ul id="entries" class="entry-list"></ul>
+    <div id="detail" class="detail">
+      <p class="empty">Select a SAML capture to inspect.</p>
+    </div>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>JWT Decoder — Awesome SAML Tracer</title>
+  <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body class="jwt">
+  <header class="jwt-head">
+    <h1>JWT Decoder</h1>
+    <nav>
+      <a href="../viewer/viewer.html">SAML viewer</a>
+    </nav>
+  </header>
+  <section class="jwt-input">
+    <textarea id="token" rows="6"
+      placeholder="Paste a JWT here (eyJhbGciOi…)" spellcheck="false" autocomplete="off"></textarea>
+    <div class="row">
+      <button id="paste" class="ghost">Paste from clipboard</button>
+      <button id="clear" class="ghost">Clear</button>
+    </div>
+  </section>
+  <section id="output" class="jwt-output" hidden></section>
+  <script type="module" src="jwt.js"></script>
+</body>
+</html>

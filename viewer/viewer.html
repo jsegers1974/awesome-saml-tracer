@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Awesome SAML Tracer — Viewer</title>
+  <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body class="viewer">
+  <header class="viewer-head">
+    <h1>SAML Tracer Viewer</h1>
+    <nav>
+      <a href="../jwt/jwt.html">JWT decoder</a>
+    </nav>
+  </header>
+  <section id="dropzone" class="dropzone">
+    <div class="dropzone-inner">
+      <p><strong>Drop a SAML-tracer JSON export here</strong></p>
+      <p>or <button id="pick" class="ghost">choose a file</button></p>
+      <input id="file" type="file" accept=".json,application/json" hidden>
+      <p class="muted" style="margin-top:16px;font-size:11px;">
+        Supports the SAML-tracer extension's JSON export format.
+      </p>
+    </div>
+  </section>
+  <main id="results" hidden></main>
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Awesome SAML Tracer",
+  "version": "0.1.0",
+  "description": "SAML tracer with formatted attributes, drag-and-drop import of saml-tracer JSON exports, and a built-in JWT decoder.",
+  "minimum_chrome_version": "111",
+  "permissions": ["webRequest", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "service_worker.js",
+    "type": "module"
+  },
+  "devtools_page": "devtools/devtools.html",
+  "action": {
+    "default_title": "Awesome SAML Tracer"
+  }
+}
