@@ -12,6 +12,15 @@ const TRACKED_TYPES = ['main_frame', 'sub_frame', 'xmlhttprequest'];
 // This is a best-effort in-memory reference; a worker restart will open a fresh window.
 let appWindowId = null;
 
+let tracingPaused = false;
+
+// In-memory header buffers keyed by requestId; populated by onBeforeSendHeaders /
+// onHeadersReceived and consumed (then deleted) by onCompleted / onErrorOccurred.
+// For redirect chains Chrome reuses the requestId, so each hop overwrites the previous
+// value — we end up with the headers from the final hop, which matches onCompleted.
+const pendingReqHeaders = new Map();
+const pendingResHeaders = new Map();
+
 chrome.action.onClicked.addListener(async () => {
   if (appWindowId != null) {
     try {
@@ -21,6 +30,10 @@ chrome.action.onClicked.addListener(async () => {
       appWindowId = null;
     }
   }
+  await chrome.storage.local.set({ [STORE_KEY]: [], [NETWORK_KEY]: [] });
+  chrome.tabs.query({}).then(tabs => {
+    for (const t of tabs) chrome.action.setBadgeText({ text: '', tabId: t.id }).catch(() => {});
+  });
   const win = await chrome.windows.create({
     url: chrome.runtime.getURL('popup/popup.html'),
     type: 'popup',
@@ -38,6 +51,7 @@ const SAML_URL_PARAM = /(?:^|[?&])SAML(?:Request|Response)=/;
 
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
+    if (tracingPaused) return;
     try {
       const entry = inspectRequest(details);
       if (entry) saveCapture(entry);
@@ -49,8 +63,29 @@ chrome.webRequest.onBeforeRequest.addListener(
   ['requestBody']
 );
 
+chrome.webRequest.onBeforeSendHeaders.addListener(
+  (details) => {
+    pendingReqHeaders.set(details.requestId, details.requestHeaders || []);
+  },
+  { urls: ['<all_urls>'], types: TRACKED_TYPES },
+  ['requestHeaders', 'extraHeaders']
+);
+
+chrome.webRequest.onHeadersReceived.addListener(
+  (details) => {
+    pendingResHeaders.set(details.requestId, details.responseHeaders || []);
+  },
+  { urls: ['<all_urls>'], types: TRACKED_TYPES },
+  ['responseHeaders', 'extraHeaders']
+);
+
 chrome.webRequest.onCompleted.addListener(
   (details) => {
+    const requestHeaders = pendingReqHeaders.get(details.requestId) || [];
+    const responseHeaders = pendingResHeaders.get(details.requestId) || [];
+    pendingReqHeaders.delete(details.requestId);
+    pendingResHeaders.delete(details.requestId);
+    if (tracingPaused) return;
     try {
       saveNetworkEntry({
         id: `net-${details.timeStamp}-${details.requestId}`,
@@ -62,10 +97,20 @@ chrome.webRequest.onCompleted.addListener(
         tabId: details.tabId,
         statusCode: details.statusCode,
         statusLine: details.statusLine,
+        requestHeaders,
+        responseHeaders,
       });
     } catch (e) {
       console.error('[awesome-saml-tracer] network capture error', e);
     }
+  },
+  { urls: ['<all_urls>'], types: TRACKED_TYPES }
+);
+
+chrome.webRequest.onErrorOccurred.addListener(
+  (details) => {
+    pendingReqHeaders.delete(details.requestId);
+    pendingResHeaders.delete(details.requestId);
   },
   { urls: ['<all_urls>'], types: TRACKED_TYPES }
 );
@@ -90,6 +135,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ network: data[NETWORK_KEY] || [] });
       });
       return true;
+    case 'get-paused':
+      sendResponse({ paused: tracingPaused });
+      return;
+    case 'toggle-pause':
+      tracingPaused = !tracingPaused;
+      sendResponse({ paused: tracingPaused });
+      return;
     case 'clear-captures':
       chrome.storage.local.set({ [STORE_KEY]: [], [NETWORK_KEY]: [] }).then(() => {
         // Clear badges for all tabs we know about.

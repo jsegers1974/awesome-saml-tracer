@@ -8,6 +8,25 @@ let captures = [];
 let networkEntries = [];
 let selectedId = null;
 let viewMode = 'saml'; // 'saml' | 'network'
+let importedMode = false;
+
+// --- pause toggle ---
+
+const pauseBtn = document.getElementById('pause');
+
+function applyPausedState(paused) {
+  pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  pauseBtn.classList.toggle('paused', paused);
+  pauseBtn.classList.toggle('ghost', !paused);
+}
+
+pauseBtn.addEventListener('click', async () => {
+  const res = await chrome.runtime.sendMessage({ type: 'toggle-pause' });
+  applyPausedState(res.paused);
+});
+
+// Sync button state with the service worker on load.
+chrome.runtime.sendMessage({ type: 'get-paused' }).then(res => applyPausedState(res?.paused ?? false)).catch(() => {});
 
 // --- view toggle ---
 
@@ -26,6 +45,7 @@ function setView(mode) {
 // --- SAML view ---
 
 async function refresh() {
+  if (importedMode) { renderSamlList(); return; }
   try {
     const res = await chrome.runtime.sendMessage({ type: 'list-captures' });
     captures = res?.captures || [];
@@ -92,6 +112,7 @@ async function selectSamlCapture(id) {
 // --- Network view ---
 
 async function refreshNetwork() {
+  if (importedMode) { renderNetworkList(); return; }
   try {
     const [netRes, capRes] = await Promise.all([
       chrome.runtime.sendMessage({ type: 'list-network' }),
@@ -161,7 +182,7 @@ async function selectNetworkEntry(id, samlCapture) {
     try {
       const { xml, encoding } = await decodeSamlMessage(encoded);
       const summary = summarizeSaml(xml);
-      detailEl.innerHTML = renderSamlDetail(samlCapture, summary, xml, encoding);
+      detailEl.innerHTML = renderSamlDetail(samlCapture, summary, xml, encoding, entry);
     } catch (e) {
       detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
     }
@@ -178,12 +199,14 @@ async function selectNetworkEntry(id, samlCapture) {
         ${row('Type', entry.type)}
         ${row('Time', new Date(entry.timestamp).toLocaleString())}
       </dl>
-    </div>`;
+    </div>
+    ${renderHeaderTable('Request Headers', entry.requestHeaders)}
+    ${renderHeaderTable('Response Headers', entry.responseHeaders)}`;
 }
 
 // --- shared detail renderers ---
 
-function renderSamlDetail(c, s, xml, encoding) {
+function renderSamlDetail(c, s, xml, encoding, networkEntry) {
   const head = `
     <div class="detail-head">
       <h2>${escape(s.kind || 'Unknown')}</h2>
@@ -205,7 +228,12 @@ function renderSamlDetail(c, s, xml, encoding) {
       ${row('NotOnOrAfter', s.conditions.notOnOrAfter)}
       ${row('Audience', s.conditions.audience)}
     </dl>` : '';
-  return head + attrs + conds + `
+  const params = renderSamlParams(c);
+  const headers = networkEntry ? (
+    renderHeaderTable('Request Headers', networkEntry.requestHeaders) +
+    renderHeaderTable('Response Headers', networkEntry.responseHeaders)
+  ) : '';
+  return head + attrs + conds + params + headers + `
     <details class="raw">
       <summary>Raw XML</summary>
       <pre>${escape(prettyPrintXml(xml))}</pre>
@@ -230,6 +258,40 @@ function renderAttributes(attrs) {
     </table>`;
 }
 
+function renderSamlParams(c) {
+  const pairs = [];
+  if (c.relayState) pairs.push(['RelayState', c.relayState]);
+  const samlKey = c.samlResponse ? 'SAMLResponse' : 'SAMLRequest';
+  const samlVal = c.samlResponse || c.samlRequest;
+  if (samlVal) pairs.push([samlKey, samlVal]);
+  if (!pairs.length) return '';
+  const binding = c.source === 'url' ? 'Redirect binding' : 'POST binding';
+  const rows = pairs.map(([k, v]) => {
+    const isBlob = k === 'SAMLResponse' || k === 'SAMLRequest';
+    const display = isBlob
+      ? `<span class="muted">${escape(v.slice(0, 64))}…</span>`
+      : escape(v);
+    return `<tr><td><code>${escape(k)}</code></td><td>${display}</td></tr>`;
+  }).join('');
+  return `
+    <h3 style="margin-top:16px;">Parameters <span class="muted" style="font-weight:normal;font-size:.85em;">(${binding})</span></h3>
+    <table class="attrs">
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderHeaderTable(label, headers) {
+  if (!headers || !headers.length) return '';
+  const rows = headers.map(h =>
+    `<tr><td><code>${escape(h.name)}</code></td><td>${escape(h.value)}</td></tr>`
+  ).join('');
+  return `
+    <h3 style="margin-top:16px;">${escape(label)}</h3>
+    <table class="attrs">
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 // --- action buttons ---
 
 document.getElementById('export').addEventListener('click', async () => {
@@ -248,7 +310,7 @@ document.getElementById('export').addEventListener('click', async () => {
   for (const n of net) {
     const cap = capByReqId.get(n.requestId);
     // res object required by saml-tracer's export: req.getResponse() must not return null
-    const res = { statusCode: n.statusCode, statusLine: n.statusLine, responseHeaders: [] };
+    const res = { statusCode: n.statusCode, statusLine: n.statusLine, responseHeaders: n.responseHeaders || [] };
     const req = {
       requestId: n.requestId,
       url: n.url,
@@ -257,11 +319,17 @@ document.getElementById('export').addEventListener('click', async () => {
       timestamp: n.timestamp,
       responseStatus: n.statusCode,
       responseStatusText: n.statusLine,
-      requestHeaders: [],
-      responseHeaders: [],
+      requestHeaders: n.requestHeaders || [],
+      responseHeaders: n.responseHeaders || [],
       res,
     };
     if (cap) {
+      // Chrome reuses the requestId across a redirect chain; onCompleted fires for the
+      // final hop (often a GET), so n.url and n.method reflect the redirect target, not
+      // the original SAML POST. Override with the capture's original values so
+      // saml-tracer's loadPOST runs and protocol detection succeeds on import.
+      req.url = cap.url;
+      req.method = cap.method;
       req.protocol = 'SAML-P';
       req.samlart = null;
       const samlKey = cap.samlResponse ? 'SAMLResponse' : 'SAMLRequest';
@@ -334,27 +402,137 @@ document.getElementById('export').addEventListener('click', async () => {
 });
 
 document.getElementById('clear').addEventListener('click', async () => {
-  await chrome.runtime.sendMessage({ type: 'clear-captures' });
+  if (!importedMode) await chrome.runtime.sendMessage({ type: 'clear-captures' });
   captures = [];
   networkEntries = [];
   selectedId = null;
+  importedMode = false;
   statusEl.textContent = '';
   detailEl.innerHTML = '<p class="empty">Cleared.</p>';
   if (viewMode === 'saml') renderSamlList(); else renderNetworkList();
 });
 
 document.getElementById('open-viewer').addEventListener('click', () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('viewer/viewer.html') });
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (file) await loadFile(file);
+  e.target.value = '';
 });
 
 document.getElementById('open-jwt').addEventListener('click', () => {
   chrome.tabs.create({ url: chrome.runtime.getURL('jwt/jwt.html') });
 });
 
+// --- drag-and-drop import ---
+
+let dragCounter = 0;
+const dropOverlay = document.getElementById('drop-overlay');
+
+document.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  dragCounter++;
+  dropOverlay.classList.remove('hidden');
+});
+document.addEventListener('dragleave', () => {
+  dragCounter--;
+  if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.add('hidden'); }
+});
+document.addEventListener('dragover', (e) => { e.preventDefault(); });
+document.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  dragCounter = 0;
+  dropOverlay.classList.add('hidden');
+  const file = e.dataTransfer?.files[0];
+  if (file) await loadFile(file);
+});
+
+async function loadFile(file) {
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch {
+    statusEl.textContent = 'Import failed: invalid JSON';
+    return;
+  }
+  const reqs = data.requests;
+  if (!Array.isArray(reqs)) {
+    statusEl.textContent = 'Import failed: missing requests array';
+    return;
+  }
+
+  networkEntries = reqs.map((r, i) => ({
+    id: `net-${r.timestamp || i}-${r.requestId || i}`,
+    requestId: String(r.requestId ?? i),
+    timestamp: r.timestamp || 0,
+    method: r.method || 'GET',
+    url: r.url || '',
+    type: r.type || 'main_frame',
+    tabId: -1,
+    statusCode: r.responseStatus ?? r.res?.statusCode ?? 0,
+    statusLine: r.responseStatusText || r.res?.statusLine || '',
+    requestHeaders: r.requestHeaders || [],
+    responseHeaders: r.responseHeaders || r.res?.responseHeaders || [],
+  }));
+
+  captures = [];
+  for (let i = 0; i < reqs.length; i++) {
+    const r = reqs[i];
+    if (r.protocol !== 'SAML-P') continue;
+
+    let samlRequest = null, samlResponse = null, relayState = null, source = 'form';
+
+    if (Array.isArray(r.post)) {
+      for (const [k, v] of r.post) {
+        if (k === 'SAMLResponse') samlResponse = v;
+        else if (k === 'SAMLRequest') samlRequest = v;
+        else if (k === 'RelayState') relayState = v;
+      }
+      source = 'form';
+    } else if (r.postData) {
+      samlResponse = r.postData.SAMLResponse?.[0] ?? null;
+      samlRequest = r.postData.SAMLRequest?.[0] ?? null;
+      relayState = r.postData.RelayState?.[0] ?? null;
+      source = 'form';
+    }
+    if (!samlRequest && !samlResponse && Array.isArray(r.get)) {
+      for (const [k, v] of r.get) {
+        if (k === 'SAMLResponse') samlResponse = v;
+        else if (k === 'SAMLRequest') samlRequest = v;
+        else if (k === 'RelayState') relayState = v;
+      }
+      source = 'url';
+    }
+
+    if (samlRequest || samlResponse) {
+      captures.push({
+        id: `${r.timestamp || i}-${r.requestId ?? i}`,
+        requestId: String(r.requestId ?? i),
+        timestamp: r.timestamp || 0,
+        method: r.method || 'POST',
+        url: r.url || '',
+        type: r.type || 'main_frame',
+        tabId: -1,
+        source,
+        samlRequest,
+        samlResponse,
+        relayState,
+      });
+    }
+  }
+
+  importedMode = true;
+  const samlCount = captures.length;
+  statusEl.textContent = `Imported: ${networkEntries.length} request${networkEntries.length !== 1 ? 's' : ''}${samlCount ? `, ${samlCount} SAML` : ''}`;
+  setView('network');
+}
+
 // --- live updates ---
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (!msg) return;
+  if (!msg || importedMode) return;
   if (msg.type === 'capture-added' && viewMode === 'saml') refresh();
   if (msg.type === 'network-added' && viewMode === 'network') refreshNetwork();
 });

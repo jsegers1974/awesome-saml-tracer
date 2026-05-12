@@ -6,6 +6,11 @@
   <link rel="stylesheet" href="../shared/styles.css">
 </head>
 <body class="panel">
+  <div id="drop-overlay" class="drop-overlay hidden">
+    <div class="drop-overlay-inner">
+      <p>Drop SAML-tracer export to import</p>
+    </div>
+  </div>
   <header>
     <h1>SAML Tracer</h1>
     <div class="view-toggle">
@@ -14,8 +19,10 @@
     </div>
     <span id="status" class="muted"></span>
     <div class="actions">
+      <button id="pause" class="ghost">Pause</button>
       <button id="export">Export</button>
       <button id="open-viewer" class="ghost">Import</button>
+      <input type="file" id="file-input" accept=".json" hidden>
       <button id="open-jwt" class="ghost">JWT</button>
       <button id="clear" class="ghost">Clear</button>
     </div>

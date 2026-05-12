@@ -51,6 +51,11 @@ button.ghost {
   color: var(--accent);
   border: 1px solid var(--border);
 }
+button.paused {
+  background: #b45309;
+  color: #fff;
+  border: 0;
+}
 .muted { color: var(--fg-muted); }
 .error { color: var(--error); }
 .empty { color: var(--fg-muted); padding: 12px; }
@@ -256,6 +261,25 @@ details.raw pre {
   box-shadow: 0 1px 2px rgba(0,0,0,.12);
 }
 .view-toggle button:hover:not(.active) { color: var(--fg); filter: none; }
+
+/* ---------- Drop overlay ---------- */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--accent-soft);
+  border: 3px dashed var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+  pointer-events: none;
+}
+.drop-overlay.hidden { display: none; }
+.drop-overlay-inner { text-align: center; }
+.drop-overlay-inner p { margin: 0; }
 
 /* ---------- Network view entries ---------- */
 .entry.is-error { color: var(--error); }
