@@ -107,6 +107,34 @@ chrome.webRequest.onCompleted.addListener(
   { urls: ['<all_urls>'], types: TRACKED_TYPES }
 );
 
+chrome.webRequest.onBeforeRedirect.addListener(
+  (details) => {
+    const requestHeaders = pendingReqHeaders.get(details.requestId) || [];
+    const responseHeaders = pendingResHeaders.get(details.requestId) || [];
+    // Don't delete from maps — the redirect reuses the requestId and will overwrite them.
+    if (tracingPaused) return;
+    try {
+      saveNetworkEntry({
+        id: `net-${details.timeStamp}-${details.requestId}-r`,
+        requestId: details.requestId,
+        timestamp: details.timeStamp,
+        method: details.method,
+        url: details.url,
+        type: details.type,
+        tabId: details.tabId,
+        statusCode: details.statusCode,
+        statusLine: details.statusLine,
+        requestHeaders,
+        responseHeaders,
+      });
+    } catch (e) {
+      console.error('[awesome-saml-tracer] redirect capture error', e);
+    }
+  },
+  { urls: ['<all_urls>'], types: TRACKED_TYPES },
+  ['responseHeaders', 'extraHeaders']
+);
+
 chrome.webRequest.onErrorOccurred.addListener(
   (details) => {
     pendingReqHeaders.delete(details.requestId);

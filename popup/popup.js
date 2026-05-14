@@ -1,4 +1,5 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
+import { decodeJwt } from '../shared/jwt.js';
 
 const entriesEl = document.getElementById('entries');
 const detailEl = document.getElementById('detail');
@@ -9,6 +10,196 @@ let networkEntries = [];
 let selectedId = null;
 let viewMode = 'saml'; // 'saml' | 'network'
 let importedMode = false;
+let settings = { highlightDomains: [], importantHeaders: [], queryParamPatterns: [], urlExtractions: [] };
+let searchQuery = '';
+
+// --- settings ---
+
+async function loadSettings() {
+  const data = await chrome.storage.sync.get('settings').catch(() => ({}));
+  const raw = data.settings || {};
+  settings = {
+    highlightDomains:   raw.highlightDomains   || [],
+    importantHeaders:   raw.importantHeaders   || [],
+    queryParamPatterns: raw.queryParamPatterns || [],
+    urlExtractions:     raw.urlExtractions     || [],
+  };
+}
+
+function matchesHighlight(url) {
+  if (!url || !settings.highlightDomains.length) return false;
+  const u = url.toLowerCase();
+  return settings.highlightDomains.some(p => {
+    const term = p.replace(/^\*+/, '').toLowerCase();
+    return term && u.includes(term);
+  });
+}
+
+const settingsPanel = document.getElementById('settings-panel');
+const settingDomainsEl = document.getElementById('setting-domains');
+const settingHeadersEl = document.getElementById('setting-headers');
+const settingQsPatternsEl = document.getElementById('setting-qs-patterns');
+const settingUrlExtractionsEl = document.getElementById('setting-url-extractions');
+
+function parseUrlExtractions(text) {
+  return text.split('\n').map(line => {
+    const idx = line.indexOf('|');
+    if (idx === -1) return null;
+    const label = line.slice(0, idx).trim();
+    const pattern = line.slice(idx + 1).trim();
+    return label && pattern ? { label, pattern } : null;
+  }).filter(Boolean);
+}
+
+function urlExtractionsToText(rules) {
+  return rules.map(r => `${r.label} | ${r.pattern}`).join('\n');
+}
+
+document.getElementById('settings-btn').addEventListener('click', () => {
+  const opening = settingsPanel.classList.contains('hidden');
+  if (opening) {
+    settingDomainsEl.value = settings.highlightDomains.join('\n');
+    settingHeadersEl.value = settings.importantHeaders.join('\n');
+    settingQsPatternsEl.value = settings.queryParamPatterns.join('\n');
+    settingUrlExtractionsEl.value = urlExtractionsToText(settings.urlExtractions);
+  }
+  settingsPanel.classList.toggle('hidden', !opening);
+});
+
+document.getElementById('settings-save').addEventListener('click', async () => {
+  settings.highlightDomains   = settingDomainsEl.value.split('\n').map(s => s.trim()).filter(Boolean);
+  settings.importantHeaders   = settingHeadersEl.value.split('\n').map(s => s.trim()).filter(Boolean);
+  settings.queryParamPatterns = settingQsPatternsEl.value.split('\n').map(s => s.trim()).filter(Boolean);
+  settings.urlExtractions     = parseUrlExtractions(settingUrlExtractionsEl.value);
+  await chrome.storage.sync.set({ settings });
+  settingsPanel.classList.add('hidden');
+  updateInfoBar([], [], null, null);
+  if (viewMode === 'saml') renderSamlList(); else renderNetworkList();
+});
+
+document.getElementById('settings-cancel').addEventListener('click', () => {
+  settingsPanel.classList.add('hidden');
+});
+
+// --- important info bar ---
+
+const infoBar = document.getElementById('info-bar');
+
+function matchesPattern(url, pattern) {
+  const term = pattern.replace(/^\*+/, '').replace(/\*+$/, '').toLowerCase();
+  return term ? url.toLowerCase().includes(term) : false;
+}
+
+function matchesQueryPattern(url) {
+  if (!url || !settings.queryParamPatterns.length) return false;
+  return settings.queryParamPatterns.some(p => matchesPattern(url, p));
+}
+
+function lastPathSegment(url) {
+  try {
+    const parts = new URL(url).pathname.split('/').filter(Boolean);
+    return parts[parts.length - 1] || null;
+  } catch { return null; }
+}
+
+function updateInfoBar(requestHeaders, responseHeaders, samlCapture, url) {
+  const allHeaders = [...(responseHeaders || []), ...(requestHeaders || [])];
+  const samlParams = samlCapture ? {
+    relaystate:   samlCapture.relayState   ?? null,
+    samlresponse: samlCapture.samlResponse ?? null,
+    samlrequest:  samlCapture.samlRequest  ?? null,
+  } : {};
+
+  // Section 1: important headers/params
+  const importantResults = settings.importantHeaders.map(name => {
+    const key = name.toLowerCase();
+    const fromHeader = allHeaders.find(h => h.name.toLowerCase() === key);
+    if (fromHeader) return { name, value: fromHeader.value };
+    return { name, value: samlParams[key] ?? null };
+  });
+
+  // Section 2: query string params when URL matches a pattern
+  let qsResults = [];
+  if (url && matchesQueryPattern(url)) {
+    try {
+      const params = [...new URL(url).searchParams.entries()];
+      qsResults = params.map(([k, v]) => ({ name: k, value: v }));
+    } catch { /* invalid URL */ }
+  }
+
+  // Section 3: URL path extractions
+  const extractionResults = url ? settings.urlExtractions
+    .filter(r => matchesPattern(url, r.pattern))
+    .map(r => ({ label: r.label, value: lastPathSegment(url) }))
+    .filter(r => r.value !== null) : [];
+
+  const hasImportant = settings.importantHeaders.length > 0;
+  const hasQs = qsResults.length > 0;
+  const hasExtractions = extractionResults.length > 0;
+  if (!hasImportant && !hasQs && !hasExtractions) { infoBar.classList.add('hidden'); return; }
+  infoBar.classList.remove('hidden');
+
+  const allCopyable = [];
+  let html = '';
+
+  if (hasImportant) {
+    html += '<span class="info-bar-label">Important</span>';
+    for (const { name, value } of importantResults) {
+      if (value !== null) allCopyable.push(value);
+      html += `<div class="info-chip">
+        <span class="info-chip-name">${escape(name)}</span>
+        <span class="info-chip-value${value === null ? ' empty' : ''}">${value !== null ? escape(value) : '—'}</span>
+        ${value !== null ? '<button class="info-chip-copy" title="Copy to clipboard">⧉</button>' : ''}
+      </div>`;
+    }
+  }
+
+  if (hasQs) {
+    if (hasImportant) html += '<span class="info-bar-sep"></span>';
+    html += '<span class="info-bar-label">Query Params</span>';
+    for (const { name, value } of qsResults) {
+      allCopyable.push(value);
+      html += `<div class="info-chip">
+        <span class="info-chip-name">${escape(name)}</span>
+        <span class="info-chip-value">${escape(value)}</span>
+        <button class="info-chip-copy" title="Copy to clipboard">⧉</button>
+      </div>`;
+    }
+  }
+
+  if (hasExtractions) {
+    if (hasImportant || hasQs) html += '<span class="info-bar-sep"></span>';
+    for (const { label, value } of extractionResults) {
+      allCopyable.push(value);
+      html += `<div class="info-chip">
+        <span class="info-chip-name">${escape(label)}</span>
+        <span class="info-chip-value">${escape(value)}</span>
+        <button class="info-chip-copy" title="Copy to clipboard">⧉</button>
+      </div>`;
+    }
+  }
+
+  infoBar.innerHTML = html;
+
+  [...infoBar.querySelectorAll('.info-chip-copy')].forEach((btn, i) => {
+    const raw = allCopyable[i];
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(raw).catch(() => {});
+      btn.classList.add('copied');
+      btn.textContent = '✓';
+      setTimeout(() => { btn.textContent = '⧉'; btn.classList.remove('copied'); }, 1500);
+    });
+  });
+}
+
+// --- search ---
+
+const searchEl = document.getElementById('search');
+searchEl.addEventListener('input', () => {
+  searchQuery = searchEl.value.trim().toLowerCase();
+  if (viewMode === 'saml') renderSamlList();
+  else if (viewMode === 'network') renderNetworkList();
+});
 
 // --- pause toggle ---
 
@@ -32,14 +223,29 @@ chrome.runtime.sendMessage({ type: 'get-paused' }).then(res => applyPausedState(
 
 document.getElementById('view-saml').addEventListener('click', () => setView('saml'));
 document.getElementById('view-network').addEventListener('click', () => setView('network'));
+document.getElementById('view-jwt').addEventListener('click', () => setView('jwt'));
+
+const mainLayout = document.getElementById('main-layout');
+const jwtView = document.getElementById('jwt-view');
 
 function setView(mode) {
   viewMode = mode;
   document.getElementById('view-saml').classList.toggle('active', mode === 'saml');
   document.getElementById('view-network').classList.toggle('active', mode === 'network');
+  document.getElementById('view-jwt').classList.toggle('active', mode === 'jwt');
+  mainLayout.classList.toggle('hidden', mode === 'jwt');
+  jwtView.classList.toggle('hidden', mode !== 'jwt');
   selectedId = null;
-  detailEl.innerHTML = '<p class="empty">Select an entry to inspect.</p>';
-  if (mode === 'saml') refresh(); else refreshNetwork();
+  searchQuery = '';
+  searchEl.value = '';
+  updateInfoBar([], [], null, null);
+  if (mode === 'saml') {
+    detailEl.innerHTML = '<p class="empty">Select an entry to inspect.</p>';
+    refresh();
+  } else if (mode === 'network') {
+    detailEl.innerHTML = '<p class="empty">Select an entry to inspect.</p>';
+    refreshNetwork();
+  }
 }
 
 // --- SAML view ---
@@ -47,8 +253,12 @@ function setView(mode) {
 async function refresh() {
   if (importedMode) { renderSamlList(); return; }
   try {
-    const res = await chrome.runtime.sendMessage({ type: 'list-captures' });
-    captures = res?.captures || [];
+    const [capRes, netRes] = await Promise.all([
+      chrome.runtime.sendMessage({ type: 'list-captures' }),
+      chrome.runtime.sendMessage({ type: 'list-network' }),
+    ]);
+    captures = capRes?.captures || [];
+    networkEntries = netRes?.network || [];
     statusEl.textContent = captures.length
       ? `${captures.length} capture${captures.length === 1 ? '' : 's'}`
       : '';
@@ -64,6 +274,9 @@ async function refresh() {
 
 function renderSamlList() {
   entriesEl.innerHTML = '';
+  const visible = captures.filter(c =>
+    matchesSearch(c.url, c.method, c.samlResponse ? 'samlresponse' : 'samlrequest')
+  );
   if (!captures.length) {
     const li = document.createElement('li');
     li.className = 'empty';
@@ -71,15 +284,24 @@ function renderSamlList() {
     entriesEl.appendChild(li);
     return;
   }
-  for (const c of captures) {
+  if (!visible.length) {
     const li = document.createElement('li');
-    li.className = 'entry' + (c.id === selectedId ? ' selected' : '');
+    li.className = 'empty';
+    li.textContent = 'No results match your filter.';
+    entriesEl.appendChild(li);
+    return;
+  }
+  for (const c of visible) {
+    const li = document.createElement('li');
+    const isHighlight = matchesHighlight(c.url);
+    li.className = ['entry', isHighlight ? 'is-highlight' : '', c.id === selectedId ? 'selected' : ''].filter(Boolean).join(' ');
     const time = new Date(c.timestamp).toLocaleTimeString();
     const what = c.samlResponse ? 'SAMLResponse' : 'SAMLRequest';
     li.innerHTML = `
       <div class="row">
-        <span class="method">${escape(c.method)}</span>
+        <span class="method ${methodClass(c.method)}">${escape(c.method)}</span>
         <span class="kind">${what}</span>
+        ${isHighlight ? '<span class="kind-domain">★</span>' : ''}
         <span class="time">${time}</span>
       </div>
       <div class="url">${escape(truncate(c.url, 140))}</div>
@@ -94,6 +316,8 @@ async function selectSamlCapture(id) {
   renderSamlList();
   const c = captures.find(x => x.id === id);
   if (!c) return;
+  const netEntry = networkEntries.find(n => n.requestId === c.requestId);
+  updateInfoBar(netEntry?.requestHeaders, netEntry?.responseHeaders, c, c.url);
   detailEl.innerHTML = '<p class="empty">Decoding…</p>';
   const encoded = c.samlResponse || c.samlRequest;
   if (!encoded) {
@@ -103,7 +327,7 @@ async function selectSamlCapture(id) {
   try {
     const { xml, encoding } = await decodeSamlMessage(encoded);
     const summary = summarizeSaml(xml);
-    detailEl.innerHTML = renderSamlDetail(c, summary, xml, encoding);
+    detailEl.innerHTML = renderSamlDetail(c, summary, xml, encoding, netEntry);
   } catch (e) {
     detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
   }
@@ -131,6 +355,9 @@ async function refreshNetwork() {
 
 function renderNetworkList() {
   entriesEl.innerHTML = '';
+  const visible = networkEntries.filter(e =>
+    matchesSearch(e.url, e.method, String(e.statusCode || ''))
+  );
   if (!networkEntries.length) {
     const li = document.createElement('li');
     li.className = 'empty';
@@ -138,15 +365,24 @@ function renderNetworkList() {
     entriesEl.appendChild(li);
     return;
   }
-  for (const entry of networkEntries) {
+  if (!visible.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'No results match your filter.';
+    entriesEl.appendChild(li);
+    return;
+  }
+  for (const entry of visible) {
     const samlCapture = captures.find(c => c.requestId === entry.requestId);
     const isError = entry.statusCode >= 400;
     const isSaml = !!samlCapture;
+    const isHighlight = matchesHighlight(entry.url);
     const li = document.createElement('li');
     li.className = [
       'entry',
       isError ? 'is-error' : '',
       isSaml ? 'is-saml' : '',
+      isHighlight ? 'is-highlight' : '',
       entry.id === selectedId ? 'selected' : '',
     ].filter(Boolean).join(' ');
 
@@ -158,9 +394,10 @@ function renderNetworkList() {
 
     li.innerHTML = `
       <div class="row">
-        <span class="method">${escape(entry.method)}</span>
+        <span class="method ${methodClass(entry.method)}">${escape(entry.method)}</span>
         <span class="status-badge ${statusClass}">${entry.statusCode}</span>
         ${isSaml ? `<span class="kind">${samlCapture.samlResponse ? 'SAMLResponse' : 'SAMLRequest'}</span>` : ''}
+        ${isHighlight ? '<span class="kind-domain">★</span>' : ''}
         <span class="time">${time}</span>
       </div>
       <div class="url">${escape(truncate(entry.url, 140))}</div>
@@ -175,6 +412,8 @@ async function selectNetworkEntry(id, samlCapture) {
   renderNetworkList();
   const entry = networkEntries.find(e => e.id === id);
   if (!entry) return;
+
+  updateInfoBar(entry.requestHeaders, entry.responseHeaders, samlCapture, entry.url);
 
   if (samlCapture) {
     detailEl.innerHTML = '<p class="empty">Decoding…</p>';
@@ -422,9 +661,72 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
   e.target.value = '';
 });
 
-document.getElementById('open-jwt').addEventListener('click', () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('jwt/jwt.html') });
+// --- JWT view ---
+
+const jwtTokenEl = document.getElementById('jwt-token');
+const jwtOutputEl = document.getElementById('jwt-output');
+
+jwtTokenEl.addEventListener('input', renderJwt);
+
+document.getElementById('jwt-paste').addEventListener('click', async () => {
+  try {
+    jwtTokenEl.value = (await navigator.clipboard.readText()).trim();
+    renderJwt();
+  } catch (e) {
+    jwtOutputEl.innerHTML = `<p class="error">Clipboard read failed: ${escape(e.message)}</p>`;
+  }
 });
+
+document.getElementById('jwt-clear').addEventListener('click', () => {
+  jwtTokenEl.value = '';
+  jwtOutputEl.innerHTML = '';
+});
+
+function renderJwt() {
+  const token = jwtTokenEl.value.trim();
+  if (!token) { jwtOutputEl.innerHTML = ''; return; }
+  try {
+    const { header, payload, signature, claims } = decodeJwt(token);
+    jwtOutputEl.innerHTML = `
+      <div class="jwt-grid">
+        <section>
+          <h2>Header</h2>
+          <pre>${escape(JSON.stringify(header, null, 2))}</pre>
+        </section>
+        <section>
+          <h2>Payload</h2>
+          <pre>${escape(JSON.stringify(payload, null, 2))}</pre>
+        </section>
+        <section>
+          <h2>Signature</h2>
+          <pre class="muted">${escape(signature || '(none)')}</pre>
+        </section>
+      </div>
+      ${renderJwtClaims(claims)}`;
+  } catch (e) {
+    jwtOutputEl.innerHTML = `<p class="error">${escape(e.message)}</p>`;
+  }
+}
+
+function renderJwtClaims(c) {
+  const items = Object.entries(c).filter(([, v]) => v != null && v !== '');
+  if (!items.length) return '';
+  const labels = {
+    issuer: 'iss (Issuer)', subject: 'sub (Subject)', audience: 'aud (Audience)',
+    issuedAt: 'iat (Issued at)', notBefore: 'nbf (Not before)', expiresAt: 'exp (Expires)',
+    expiresIn: 'Expires in', expired: 'Expired', jwtId: 'jti (JWT ID)'
+  };
+  return `
+    <section class="claims">
+      <h2 style="margin:16px 0 8px;text-transform:uppercase;font-size:13px;letter-spacing:0.04em;color:var(--fg-muted);">Highlights</h2>
+      <dl>
+        ${items.map(([k, v]) =>
+          `<dt>${escape(labels[k] || k)}</dt>
+           <dd${k === 'expired' && v ? ' class="expired"' : ''}>${escape(String(v))}</dd>`
+        ).join('')}
+      </dl>
+    </section>`;
+}
 
 // --- drag-and-drop import ---
 
@@ -548,6 +850,14 @@ function row(label, value) {
   if (value == null || value === '') return '';
   return `<dt>${escape(label)}</dt><dd>${escape(String(value))}</dd>`;
 }
+function methodClass(m) { return 'method-' + (m || '').toLowerCase(); }
+function matchesSearch(url, method, extra) {
+  if (!searchQuery) return true;
+  const q = searchQuery;
+  return (url || '').toLowerCase().includes(q) ||
+    (method || '').toLowerCase().includes(q) ||
+    (extra || '').toLowerCase().includes(q);
+}
 function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 function escape(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -555,4 +865,4 @@ function escape(s) {
   }[c]));
 }
 
-refresh();
+loadSettings().then(() => refresh());

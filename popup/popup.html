@@ -16,6 +16,7 @@
     <div class="view-toggle">
       <button id="view-saml" class="active">SAML</button>
       <button id="view-network">All Traffic</button>
+      <button id="view-jwt">JWT</button>
     </div>
     <span id="status" class="muted"></span>
     <div class="actions">
@@ -23,15 +24,60 @@
       <button id="export">Export</button>
       <button id="open-viewer" class="ghost">Import</button>
       <input type="file" id="file-input" accept=".json" hidden>
-      <button id="open-jwt" class="ghost">JWT</button>
       <button id="clear" class="ghost">Clear</button>
+      <button id="settings-btn" class="ghost">⚙ Settings</button>
     </div>
   </header>
-  <div class="layout">
-    <ul id="entries" class="entry-list"></ul>
+  <div id="settings-panel" class="settings-panel hidden">
+    <div class="settings-grid">
+      <div class="settings-field">
+        <label for="setting-domains">Highlight domains</label>
+        <span class="muted settings-hint">One pattern per line — wildcards ok (e.g. *availity.com)</span>
+        <textarea id="setting-domains" rows="3" placeholder="*availity.com&#10;*okta.com"></textarea>
+      </div>
+      <div class="settings-field">
+        <label for="setting-headers">Important Headers / Parameters</label>
+        <span class="muted settings-hint">Header or SAML parameter names to pin in the info bar (one per line)</span>
+        <textarea id="setting-headers" rows="3" placeholder="X-Global-Transaction-Id&#10;RelayState&#10;SAMLResponse"></textarea>
+      </div>
+      <div class="settings-field">
+        <label for="setting-qs-patterns">Show query params for</label>
+        <span class="muted settings-hint">Show all query string params in the info bar when URL matches (one pattern per line)</span>
+        <textarea id="setting-qs-patterns" rows="3" placeholder="*magneto*&#10;*availity.com/api*"></textarea>
+      </div>
+      <div class="settings-field">
+        <label for="setting-url-extractions">Extract from URL path</label>
+        <span class="muted settings-hint">Label | *pattern* — extracts the last path segment when URL matches</span>
+        <textarea id="setting-url-extractions" rows="3" placeholder="Config ID | *magneto*&#10;Tenant | *tenants/*/config*"></textarea>
+      </div>
+    </div>
+    <div class="settings-footer">
+      <button id="settings-save">Save</button>
+      <button id="settings-cancel" class="ghost">Cancel</button>
+    </div>
+  </div>
+  <div id="info-bar" class="info-bar hidden"></div>
+  <div id="main-layout" class="layout">
+    <div class="entry-pane">
+      <div class="search-bar">
+        <input type="search" id="search" placeholder="Filter by URL, method, status…" autocomplete="off">
+      </div>
+      <ul id="entries" class="entry-list"></ul>
+    </div>
     <div id="detail" class="detail">
       <p class="empty">Select a SAML capture to inspect.</p>
     </div>
+    </div>
+  </div>
+  <div id="jwt-view" class="jwt-view hidden">
+    <div class="jwt-input">
+      <textarea id="jwt-token" placeholder="Paste a JWT here…" spellcheck="false"></textarea>
+      <div class="row">
+        <button id="jwt-paste">Paste from clipboard</button>
+        <button id="jwt-clear" class="ghost">Clear</button>
+      </div>
+    </div>
+    <div id="jwt-output" class="jwt-output"></div>
   </div>
   <script type="module" src="popup.js"></script>
 </body>
