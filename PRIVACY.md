@@ -53,4 +53,4 @@ When you use the Export (⬆) or Report (📄) features, a file is saved to your
 
 ## Contact
 
-If you have questions about this privacy policy, open an issue on the project's GitHub repository or reach out via [Ko-fi](https://ko-fi.com/samldev).
+If you have questions about this privacy policy, [open an issue on GitHub](https://github.com/jsegers1974/awesome-saml-tracer/issues) or reach out via [Ko-fi](https://ko-fi.com/samldev).
