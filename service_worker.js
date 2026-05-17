@@ -170,6 +170,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       tracingPaused = !tracingPaused;
       sendResponse({ paused: tracingPaused });
       return;
+    case 'open-app':
+    case 'open-app-jwt': {
+      const view = msg.type === 'open-app-jwt' ? 'jwt' : null;
+      (async () => {
+        if (appWindowId != null) {
+          try {
+            await chrome.windows.update(appWindowId, { focused: true });
+            if (view) chrome.runtime.sendMessage({ type: 'set-view', view }).catch(() => {});
+            sendResponse({ ok: true });
+            return;
+          } catch (_) {
+            appWindowId = null;
+          }
+        }
+        const url = chrome.runtime.getURL('popup/popup.html') + (view ? `#${view}` : '');
+        const win = await chrome.windows.create({ url, type: 'popup', width: 960, height: 700 });
+        appWindowId = win.id;
+        sendResponse({ ok: true });
+      })();
+      return true;
+    }
     case 'clear-captures':
       chrome.storage.local.set({ [STORE_KEY]: [], [NETWORK_KEY]: [] }).then(() => {
         // Clear badges for all tabs we know about.

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "SAML tracer with formatted attributes, drag-and-drop import of saml-tracer JSON exports, and a built-in JWT decoder.",
   "minimum_chrome_version": "111",
-  "permissions": ["webRequest", "storage", "tabs"],
+  "permissions": ["webRequest", "storage", "tabs", "downloads"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "service_worker.js",

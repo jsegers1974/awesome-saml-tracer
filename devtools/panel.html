@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>SAML Tracer</title>
+  <title>Awesome SAML Tracer</title>
   <link rel="stylesheet" href="../shared/styles.css">
 </head>
 <body class="panel">
@@ -16,11 +16,15 @@
     </div>
   </header>
   <div class="layout">
-    <ul id="entries" class="entry-list"></ul>
+    <div class="entry-pane" id="entry-pane">
+      <ul id="entries" class="entry-list"></ul>
+    </div>
+    <div id="resizer" class="resizer"></div>
     <section id="detail" class="detail">
       <p class="empty">Select a SAML capture to inspect.</p>
     </section>
   </div>
+
   <script type="module" src="panel.js"></script>
 </body>
 </html>

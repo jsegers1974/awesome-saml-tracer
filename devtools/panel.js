@@ -1,4 +1,5 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
+import { initResizer } from '../shared/resizer.js';
 
 const tabId = chrome.devtools.inspectedWindow.tabId;
 const entriesEl = document.getElementById('entries');
@@ -145,13 +146,15 @@ document.getElementById('clear').addEventListener('click', async () => {
   detailEl.innerHTML = '<p class="empty">Cleared.</p>';
 });
 document.getElementById('open-viewer').addEventListener('click', () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('viewer/viewer.html') });
+  chrome.runtime.sendMessage({ type: 'open-app' }).catch(() => {});
 });
 document.getElementById('open-jwt').addEventListener('click', () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('jwt/jwt.html') });
+  chrome.runtime.sendMessage({ type: 'open-app-jwt' }).catch(() => {});
 });
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === 'capture-added' && msg.entry?.tabId === tabId) refresh();
 });
+
+initResizer(document.getElementById('resizer'), document.getElementById('entry-pane'), 'panel-pane-width');
 
 refresh();

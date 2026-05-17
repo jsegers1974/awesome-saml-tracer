@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>SAML Tracer</title>
+  <title>Awesome SAML Tracer</title>
   <link rel="stylesheet" href="../shared/styles.css">
 </head>
 <body class="panel">
@@ -12,28 +12,31 @@
     </div>
   </div>
   <header>
-    <h1>SAML Tracer</h1>
     <div class="view-toggle">
       <button id="view-saml" class="active">SAML</button>
       <button id="view-network">All Traffic</button>
+      <button id="view-errors">Errors</button>
       <button id="view-jwt">JWT</button>
     </div>
     <span id="status" class="muted"></span>
     <div class="actions">
-      <button id="pause" class="ghost">Pause</button>
-      <button id="export" class="ghost">Export</button>
-      <button id="open-viewer" class="ghost">Import</button>
+      <button id="pause" class="ghost icon-btn" data-tooltip="Pause">⏸</button>
+      <button id="clear" class="ghost icon-btn" data-tooltip="Clear">⊘</button>
+      <button id="export" class="ghost icon-btn" data-tooltip="Export">⬆</button>
+      <button id="open-viewer" class="ghost icon-btn" data-tooltip="Import">📂</button>
       <input type="file" id="file-input" accept=".json" hidden>
-      <button id="clear" class="ghost">Clear</button>
-      <button id="settings-btn" class="ghost">⚙ Settings</button>
+      <button id="share-report" class="ghost icon-btn" data-tooltip="Report">📄</button>
+      <button id="settings-btn" class="ghost icon-btn" data-tooltip="Settings">⚙</button>
+      <button id="kofi-btn" class="ghost icon-btn kofi-btn tooltip-right" data-tooltip="Support on Ko-fi">☕</button>
     </div>
   </header>
+  <div id="report-banner" class="report-banner hidden"></div>
   <div id="settings-panel" class="settings-panel hidden">
     <div class="settings-grid">
       <div class="settings-field">
         <label for="setting-domains">Highlight domains</label>
-        <span class="muted settings-hint">One pattern per line — wildcards ok (e.g. *availity.com)</span>
-        <textarea id="setting-domains" rows="3" placeholder="*availity.com&#10;*okta.com"></textarea>
+        <span class="muted settings-hint">One pattern per line — wildcards ok (e.g. *mycompany.com)</span>
+        <textarea id="setting-domains" rows="3" placeholder="*mycompany.com&#10;*okta.com"></textarea>
       </div>
       <div class="settings-field">
         <label for="setting-headers">Important Headers / Parameters</label>
@@ -43,12 +46,12 @@
       <div class="settings-field">
         <label for="setting-qs-patterns">Show query params for</label>
         <span class="muted settings-hint">Show all query string params in the info bar when URL matches (one pattern per line)</span>
-        <textarea id="setting-qs-patterns" rows="3" placeholder="*magneto*&#10;*availity.com/api*"></textarea>
+        <textarea id="setting-qs-patterns" rows="3" placeholder="*myapp*&#10;*mycompany.com/api*"></textarea>
       </div>
       <div class="settings-field">
         <label for="setting-url-extractions">Extract from URL path</label>
         <span class="muted settings-hint">Label | *pattern* — extracts the last path segment when URL matches</span>
-        <textarea id="setting-url-extractions" rows="3" placeholder="Config ID | *magneto*&#10;Tenant | *tenants/*/config*"></textarea>
+        <textarea id="setting-url-extractions" rows="3" placeholder="Config ID | *myapp*&#10;Tenant | *tenants/*/config*"></textarea>
       </div>
     </div>
     <div class="settings-footer">
@@ -64,6 +67,7 @@
       </div>
       <ul id="entries" class="entry-list"></ul>
     </div>
+    <div id="resizer" class="resizer"></div>
     <div id="detail" class="detail">
       <p class="empty">Select a SAML capture to inspect.</p>
     </div>

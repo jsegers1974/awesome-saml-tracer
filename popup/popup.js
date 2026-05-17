@@ -1,5 +1,6 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
 import { decodeJwt } from '../shared/jwt.js';
+import { initResizer } from '../shared/resizer.js';
 
 const entriesEl = document.getElementById('entries');
 const detailEl = document.getElementById('detail');
@@ -206,7 +207,8 @@ searchEl.addEventListener('input', () => {
 const pauseBtn = document.getElementById('pause');
 
 function applyPausedState(paused) {
-  pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  pauseBtn.textContent = paused ? '▶' : '⏸';
+  pauseBtn.dataset.tooltip = paused ? 'Resume' : 'Pause';
   pauseBtn.classList.toggle('paused', paused);
   pauseBtn.classList.toggle('ghost', !paused);
 }
@@ -223,6 +225,7 @@ chrome.runtime.sendMessage({ type: 'get-paused' }).then(res => applyPausedState(
 
 document.getElementById('view-saml').addEventListener('click', () => setView('saml'));
 document.getElementById('view-network').addEventListener('click', () => setView('network'));
+document.getElementById('view-errors').addEventListener('click', () => setView('errors'));
 document.getElementById('view-jwt').addEventListener('click', () => setView('jwt'));
 
 const mainLayout = document.getElementById('main-layout');
@@ -232,6 +235,7 @@ function setView(mode) {
   viewMode = mode;
   document.getElementById('view-saml').classList.toggle('active', mode === 'saml');
   document.getElementById('view-network').classList.toggle('active', mode === 'network');
+  document.getElementById('view-errors').classList.toggle('active', mode === 'errors');
   document.getElementById('view-jwt').classList.toggle('active', mode === 'jwt');
   mainLayout.classList.toggle('hidden', mode === 'jwt');
   jwtView.classList.toggle('hidden', mode !== 'jwt');
@@ -242,16 +246,25 @@ function setView(mode) {
   if (mode === 'saml') {
     detailEl.innerHTML = '<p class="empty">Select an entry to inspect.</p>';
     refresh();
-  } else if (mode === 'network') {
+  } else if (mode === 'network' || mode === 'errors') {
     detailEl.innerHTML = '<p class="empty">Select an entry to inspect.</p>';
     refreshNetwork();
   }
 }
 
+// --- errors button state ---
+
+function syncErrorsButton() {
+  const btn = document.getElementById('view-errors');
+  const hasErrors = networkEntries.some(e => e.statusCode >= 400);
+  btn.disabled = !hasErrors;
+  if (!hasErrors && viewMode === 'errors') setView('network');
+}
+
 // --- SAML view ---
 
 async function refresh() {
-  if (importedMode) { renderSamlList(); return; }
+  if (importedMode) { renderSamlList(); syncErrorsButton(); return; }
   try {
     const [capRes, netRes] = await Promise.all([
       chrome.runtime.sendMessage({ type: 'list-captures' }),
@@ -263,6 +276,7 @@ async function refresh() {
       ? `${captures.length} capture${captures.length === 1 ? '' : 's'}`
       : '';
     renderSamlList();
+    syncErrorsButton();
     if (selectedId && !captures.find(c => c.id === selectedId)) {
       selectedId = null;
       detailEl.innerHTML = '<p class="empty">Select a SAML capture to inspect.</p>';
@@ -328,6 +342,7 @@ async function selectSamlCapture(id) {
     const { xml, encoding } = await decodeSamlMessage(encoded);
     const summary = summarizeSaml(xml);
     detailEl.innerHTML = renderSamlDetail(c, summary, xml, encoding, netEntry);
+    addCopyButton(() => buildSamlCaptureText(c, summary, xml, encoding, netEntry));
   } catch (e) {
     detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
   }
@@ -336,7 +351,7 @@ async function selectSamlCapture(id) {
 // --- Network view ---
 
 async function refreshNetwork() {
-  if (importedMode) { renderNetworkList(); return; }
+  if (importedMode) { renderNetworkList(); syncErrorsButton(); return; }
   try {
     const [netRes, capRes] = await Promise.all([
       chrome.runtime.sendMessage({ type: 'list-network' }),
@@ -348,6 +363,7 @@ async function refreshNetwork() {
       ? `${networkEntries.length} request${networkEntries.length === 1 ? '' : 's'}`
       : '';
     renderNetworkList();
+    syncErrorsButton();
   } catch (e) {
     statusEl.textContent = 'Service worker not ready — try reloading.';
   }
@@ -355,7 +371,10 @@ async function refreshNetwork() {
 
 function renderNetworkList() {
   entriesEl.innerHTML = '';
-  const visible = networkEntries.filter(e =>
+  const pool = viewMode === 'errors'
+    ? networkEntries.filter(e => e.statusCode >= 400)
+    : networkEntries;
+  const visible = pool.filter(e =>
     matchesSearch(e.url, e.method, String(e.statusCode || ''))
   );
   if (!networkEntries.length) {
@@ -368,7 +387,7 @@ function renderNetworkList() {
   if (!visible.length) {
     const li = document.createElement('li');
     li.className = 'empty';
-    li.textContent = 'No results match your filter.';
+    li.textContent = viewMode === 'errors' ? 'No error responses captured yet.' : 'No results match your filter.';
     entriesEl.appendChild(li);
     return;
   }
@@ -422,6 +441,7 @@ async function selectNetworkEntry(id, samlCapture) {
       const { xml, encoding } = await decodeSamlMessage(encoded);
       const summary = summarizeSaml(xml);
       detailEl.innerHTML = renderSamlDetail(samlCapture, summary, xml, encoding, entry);
+      addCopyButton(() => buildSamlCaptureText(samlCapture, summary, xml, encoding, entry));
     } catch (e) {
       detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
     }
@@ -441,6 +461,7 @@ async function selectNetworkEntry(id, samlCapture) {
     </div>
     ${renderHeaderTable('Request Headers', entry.requestHeaders)}
     ${renderHeaderTable('Response Headers', entry.responseHeaders)}`;
+  addCopyButton(() => buildNetworkEntryText(entry));
 }
 
 // --- shared detail renderers ---
@@ -640,6 +661,334 @@ document.getElementById('export').addEventListener('click', async () => {
   URL.revokeObjectURL(url);
 });
 
+// --- share: HTML report + clipboard copy ---
+
+async function buildReportData() {
+  const reportCaptures = [];
+  for (const c of captures) {
+    const encoded = c.samlResponse || c.samlRequest;
+    let xml = null, encoding = null, summary = null;
+    if (encoded) {
+      try {
+        ({ xml, encoding } = await decodeSamlMessage(encoded));
+        summary = summarizeSaml(xml);
+      } catch (_) {}
+    }
+    const netEntry = networkEntries.find(n => n.requestId === c.requestId);
+    reportCaptures.push({ capture: c, summary, xml, encoding, netEntry });
+  }
+  return { reportCaptures, allNetwork: [...networkEntries] };
+}
+
+function rptRow(label, value) {
+  if (value == null || value === '') return '';
+  return `<tr><td class="lbl">${escape(label)}</td><td>${escape(String(value))}</td></tr>`;
+}
+
+function rptHeaderTable(label, headers) {
+  if (!headers || !headers.length) return '';
+  const rows = headers.map(h => `<tr><td class="lbl">${escape(h.name)}</td><td>${escape(h.value)}</td></tr>`).join('');
+  return `<h4>${escape(label)}</h4><table class="htbl"><tbody>${rows}</tbody></table>`;
+}
+
+async function buildHtmlString() {
+  const { reportCaptures, allNetwork } = await buildReportData();
+  const nowStr = new Date().toLocaleString();
+
+  const samlSections = reportCaptures.map((item, i) => {
+    const { capture: c, summary: s, xml, encoding, netEntry } = item;
+    const what = c.samlResponse ? 'SAMLResponse' : 'SAMLRequest';
+    const time = new Date(c.timestamp).toLocaleString();
+    const statusCode = netEntry?.statusCode ?? '';
+
+    const attrRows = !s?.attributes?.length
+      ? '<tr><td colspan="3" class="muted">No attributes</td></tr>'
+      : s.attributes.map(a => `<tr>
+          <td>${escape(a.friendlyName || shortName(a.name))}</td>
+          <td class="muted mono">${escape(a.name || '')}</td>
+          <td>${a.values.length ? a.values.map(v => escape(v)).join('<br>') : '<span class="muted">(no values)</span>'}</td>
+        </tr>`).join('');
+
+    const condBlock = s?.conditions ? `
+      <h4>Conditions</h4>
+      <table class="htbl"><tbody>
+        ${rptRow('Not Before', s.conditions.notBefore)}
+        ${rptRow('Not On Or After', s.conditions.notOnOrAfter)}
+        ${rptRow('Audience', s.conditions.audience)}
+      </tbody></table>` : '';
+
+    const paramPairs = [];
+    if (c.relayState) paramPairs.push(['RelayState', c.relayState]);
+    const samlKey = c.samlResponse ? 'SAMLResponse' : 'SAMLRequest';
+    const samlVal = c.samlResponse || c.samlRequest;
+    if (samlVal) paramPairs.push([samlKey, samlVal.slice(0, 80) + '…']);
+    const paramBlock = paramPairs.length ? `
+      <h4>Parameters (${c.source === 'url' ? 'Redirect binding' : 'POST binding'})</h4>
+      <table class="htbl"><tbody>
+        ${paramPairs.map(([k, v]) => `<tr><td class="lbl mono">${escape(k)}</td><td class="mono muted">${escape(v)}</td></tr>`).join('')}
+      </tbody></table>` : '';
+
+    const errorNote = !s && xml === null ? '<p class="error">Could not decode SAML payload.</p>' : '';
+
+    return `
+      <div class="capture-card">
+        <div class="capture-head">
+          <span class="badge ${what.toLowerCase()}">${escape(what)}</span>
+          <span class="method">${escape(c.method)}</span>
+          ${statusCode ? `<span class="status">${escape(String(statusCode))}</span>` : ''}
+          <span class="cap-time">${escape(time)}</span>
+        </div>
+        <div class="cap-url">${escape(c.url)}</div>
+        ${errorNote}
+        ${s ? `
+          <table class="htbl" style="margin-top:12px"><tbody>
+            ${rptRow('Issuer', s.issuer)}
+            ${rptRow('Destination', s.destination)}
+            ${rptRow('Subject', s.subject)}
+            ${rptRow('Status', s.status)}
+            ${rptRow('Encoding', encoding)}
+          </tbody></table>
+          ${condBlock}
+          <h4>Attributes (${s.attributes?.length ?? 0})</h4>
+          <table class="attrs"><thead><tr><th>Friendly Name</th><th>Full Name</th><th>Value(s)</th></tr></thead>
+            <tbody>${attrRows}</tbody>
+          </table>
+          ${paramBlock}
+        ` : ''}
+        ${rptHeaderTable('Request Headers', netEntry?.requestHeaders)}
+        ${rptHeaderTable('Response Headers', netEntry?.responseHeaders)}
+        ${xml ? `
+          <details>
+            <summary>Raw XML</summary>
+            <pre class="xml">${escape(prettyPrintXml(xml))}</pre>
+          </details>` : ''}
+      </div>`;
+  }).join('');
+
+  const networkRows = allNetwork.map(e => {
+    const statusClass = e.statusCode >= 400 ? 'err' : e.statusCode >= 300 ? 'redir' : 'ok';
+    const isSaml = captures.some(c => c.requestId === e.requestId);
+    const time = new Date(e.timestamp).toLocaleTimeString();
+    const reqText = e.requestHeaders?.map(h => `  ${h.name}: ${h.value}`).join('\n') || '';
+    const resText = e.responseHeaders?.map(h => `  ${h.name}: ${h.value}`).join('\n') || '';
+    const hdrBlock = (reqText || resText) ? `
+      <details>
+        <summary>Headers</summary>
+        ${reqText ? `<div class="hdr-sect"><strong>Request</strong><pre>${escape(reqText)}</pre></div>` : ''}
+        ${resText ? `<div class="hdr-sect"><strong>Response</strong><pre>${escape(resText)}</pre></div>` : ''}
+      </details>` : '';
+    return `<tr${isSaml ? ' class="saml-row"' : ''}>
+      <td class="method">${escape(e.method)}</td>
+      <td class="status ${statusClass}">${escape(String(e.statusCode || ''))}</td>
+      <td class="net-url">${escape(e.url)}</td>
+      <td class="time-col">${escape(time)}</td>
+      <td>${hdrBlock}</td>
+    </tr>`;
+  }).join('');
+
+  const css = `
+    *{box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1d2433;background:#fff;margin:0;padding:0;font-size:14px;line-height:1.5}
+    header{background:#f5f7fa;border-bottom:1px solid #e3e6eb;padding:20px 32px}
+    header h1{margin:0 0 4px;font-size:22px}
+    header p{margin:0;color:#6a7280;font-size:13px}
+    main{padding:24px 32px;max-width:1100px}
+    h2{font-size:17px;border-bottom:2px solid #e3e6eb;padding-bottom:8px;margin:28px 0 16px}
+    h4{font-size:12px;color:#6a7280;text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px;font-weight:600}
+    .capture-card{border:1px solid #e3e6eb;border-radius:8px;padding:16px 20px;margin-bottom:16px;background:#f9fafb}
+    .capture-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+    .badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600}
+    .badge.samlresponse{background:rgba(51,103,214,.12);color:#3367d6}
+    .badge.samlrequest{background:rgba(26,127,55,.12);color:#1a7f37}
+    .capture-head .method{font-weight:700;font-size:12px}
+    .capture-head .status{font-size:12px;font-weight:600;color:#6a7280}
+    .cap-time{font-size:12px;color:#6a7280;margin-left:auto}
+    .cap-url{font-size:12px;color:#6a7280;word-break:break-all;margin-bottom:8px}
+    .htbl{width:100%;border-collapse:collapse;margin:4px 0 12px}
+    .htbl td{padding:4px 8px;border-bottom:1px solid #e3e6eb;font-size:13px;vertical-align:top}
+    .htbl td.lbl{color:#6a7280;white-space:nowrap;width:1%;padding-right:16px;font-weight:500}
+    .mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px}
+    .htbl td.mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px}
+    table.attrs{width:100%;border-collapse:collapse;margin:4px 0 12px;font-size:13px}
+    table.attrs th,table.attrs td{padding:5px 8px;border-bottom:1px solid #e3e6eb;text-align:left;vertical-align:top}
+    table.attrs th{color:#6a7280;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;background:#f1f3f5}
+    table.attrs td.muted{color:#6a7280;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px}
+    .muted{color:#6a7280}.error{color:#c5221f}
+    details summary{cursor:pointer;color:#6a7280;font-size:13px;padding:4px 0;user-select:none}
+    details summary:hover{color:#3367d6}
+    details[open] summary{margin-bottom:8px}
+    pre.xml{background:#f1f3f5;padding:12px;border-radius:4px;overflow:auto;font-size:11px;font-family:ui-monospace,'SF Mono',Menlo,monospace;margin:0;max-height:400px}
+    .hdr-sect{margin-bottom:8px}
+    .hdr-sect strong{font-size:12px;color:#6a7280}
+    .hdr-sect pre{background:#f1f3f5;padding:8px;border-radius:4px;font-size:11px;font-family:ui-monospace,'SF Mono',Menlo,monospace;margin:4px 0 0;overflow:auto}
+    table.net{width:100%;border-collapse:collapse;font-size:13px}
+    table.net th{color:#6a7280;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:2px solid #e3e6eb;text-align:left}
+    table.net td{padding:6px 8px;border-bottom:1px solid #e3e6eb;vertical-align:top}
+    table.net tr.saml-row{background:rgba(51,103,214,.05)}
+    .net-url{word-break:break-all}
+    .status.ok{color:#1a7f37;font-weight:600}
+    .status.redir{color:#9a6700;font-weight:600}
+    .status.err{color:#c5221f;font-weight:600}
+    @media print{.capture-card{break-inside:avoid}details{display:block}details summary{display:none}}
+    @media(prefers-color-scheme:dark){
+      body{background:#1d1f23;color:#e3e6eb}
+      header{background:#25282d;border-color:#353a40}
+      .capture-card{background:#25282d;border-color:#353a40}
+      .htbl td,table.attrs th,table.attrs td,table.net th,table.net td{border-color:#353a40}
+      table.attrs th{background:#2d3137}
+      pre.xml,.hdr-sect pre{background:#2d3137;color:#e3e6eb}
+      h2{border-color:#353a40}
+    }`;
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SAML Trace Report — ${escape(nowStr)}</title>
+  <style>${css}</style>
+</head>
+<body>
+  <header>
+    <h1>SAML Trace Report</h1>
+    <p>Generated: ${escape(nowStr)} &nbsp;|&nbsp; ${reportCaptures.length} SAML capture${reportCaptures.length !== 1 ? 's' : ''} &nbsp;|&nbsp; ${allNetwork.length} total request${allNetwork.length !== 1 ? 's' : ''}</p>
+  </header>
+  <main>
+    ${reportCaptures.length ? `<h2>SAML Captures (${reportCaptures.length})</h2>${samlSections}` : '<p class="muted">No SAML captures in this trace.</p>'}
+    ${allNetwork.length ? `
+    <h2>Network Traffic (${allNetwork.length} request${allNetwork.length !== 1 ? 's' : ''})</h2>
+    <table class="net">
+      <thead><tr><th>Method</th><th>Status</th><th>URL</th><th>Time</th><th>Headers</th></tr></thead>
+      <tbody>${networkRows}</tbody>
+    </table>` : ''}
+  </main>
+</body>
+</html>`;
+}
+
+async function generateHtmlReport() {
+  if (!captures.length && !networkEntries.length) {
+    statusEl.textContent = 'Nothing to report — no captures yet.';
+    return;
+  }
+  const html = await buildHtmlString();
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const filename = `SAML-Report-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.html`;
+  chrome.downloads.download({ url, filename, saveAs: false }, (downloadId) => {
+    URL.revokeObjectURL(url);
+    showReportBanner(downloadId, filename);
+  });
+}
+
+let bannerDismissTimer = null;
+
+function showReportBanner(downloadId, filename) {
+  const banner = document.getElementById('report-banner');
+  if (bannerDismissTimer) { clearTimeout(bannerDismissTimer); bannerDismissTimer = null; }
+  banner.innerHTML = `
+    <span class="report-banner-msg">Report saved: <strong>${escape(filename)}</strong></span>
+    <button id="report-show-folder">Show in Folder</button>
+    <button class="report-banner-dismiss" id="report-dismiss" title="Dismiss">✕</button>
+  `;
+  banner.classList.remove('hidden');
+  document.getElementById('report-show-folder').addEventListener('click', () => {
+    chrome.downloads.show(downloadId);
+  });
+  document.getElementById('report-dismiss').addEventListener('click', () => {
+    banner.classList.add('hidden');
+    if (bannerDismissTimer) { clearTimeout(bannerDismissTimer); bannerDismissTimer = null; }
+  });
+  bannerDismissTimer = setTimeout(() => {
+    banner.classList.add('hidden');
+    bannerDismissTimer = null;
+  }, 8000);
+}
+
+function buildSamlCaptureText(c, s, xml, encoding, netEntry) {
+  const what = c.samlResponse ? 'SAMLResponse' : 'SAMLRequest';
+  const statusCode = netEntry?.statusCode ?? '';
+  const time = new Date(c.timestamp).toLocaleString();
+  const lines = [];
+  lines.push(`${what}  ${c.method}${statusCode ? ' → ' + statusCode : ''}`);
+  lines.push(c.url);
+  lines.push(`Time:        ${time}`);
+  if (s) {
+    if (s.issuer)      lines.push(`Issuer:      ${s.issuer}`);
+    if (s.subject)     lines.push(`Subject:     ${s.subject}`);
+    if (s.status)      lines.push(`Status:      ${s.status}`);
+    if (s.destination) lines.push(`Destination: ${s.destination}`);
+    if (s.conditions) {
+      lines.push(`Conditions:  ${s.conditions.notBefore || ''} → ${s.conditions.notOnOrAfter || ''}`);
+      if (s.conditions.audience) lines.push(`Audience:    ${s.conditions.audience}`);
+    }
+    if (s.attributes?.length) {
+      lines.push('');
+      lines.push(`Attributes (${s.attributes.length}):`);
+      for (const a of s.attributes) {
+        const name = a.friendlyName || shortName(a.name);
+        const vals = a.values.join(', ') || '(no values)';
+        lines.push(`  ${name.padEnd(22)} ${vals}`);
+      }
+    }
+  }
+  if (netEntry?.requestHeaders?.length) {
+    lines.push('');
+    lines.push('Request Headers:');
+    for (const h of netEntry.requestHeaders) lines.push(`  ${h.name}: ${h.value}`);
+  }
+  if (netEntry?.responseHeaders?.length) {
+    lines.push('');
+    lines.push('Response Headers:');
+    for (const h of netEntry.responseHeaders) lines.push(`  ${h.name}: ${h.value}`);
+  }
+  if (xml) {
+    lines.push('');
+    lines.push('Raw XML:');
+    prettyPrintXml(xml).split('\n').forEach(l => lines.push('  ' + l));
+  }
+  return lines.join('\n');
+}
+
+function buildNetworkEntryText(entry) {
+  const time = new Date(entry.timestamp).toLocaleString();
+  const lines = [];
+  lines.push(`${entry.method}  ${entry.statusCode || ''}  ${entry.url}`);
+  lines.push(`Time: ${time}`);
+  if (entry.requestHeaders?.length) {
+    lines.push('');
+    lines.push('Request Headers:');
+    for (const h of entry.requestHeaders) lines.push(`  ${h.name}: ${h.value}`);
+  }
+  if (entry.responseHeaders?.length) {
+    lines.push('');
+    lines.push('Response Headers:');
+    for (const h of entry.responseHeaders) lines.push(`  ${h.name}: ${h.value}`);
+  }
+  return lines.join('\n');
+}
+
+function addCopyButton(getText) {
+  const btn = document.createElement('button');
+  btn.className = 'ghost detail-copy-btn';
+  btn.textContent = 'Copy';
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(getText());
+      btn.textContent = '✓ Copied!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    } catch (e) {
+      statusEl.textContent = `Copy failed: ${e.message}`;
+    }
+  });
+  detailEl.insertBefore(btn, detailEl.firstChild);
+}
+
+document.getElementById('kofi-btn').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'https://ko-fi.com/samldev' });
+});
+
+document.getElementById('share-report').addEventListener('click', generateHtmlReport);
+
 document.getElementById('clear').addEventListener('click', async () => {
   if (!importedMode) await chrome.runtime.sendMessage({ type: 'clear-captures' });
   captures = [];
@@ -649,6 +998,7 @@ document.getElementById('clear').addEventListener('click', async () => {
   statusEl.textContent = '';
   detailEl.innerHTML = '<p class="empty">Cleared.</p>';
   if (viewMode === 'saml') renderSamlList(); else renderNetworkList();
+  syncErrorsButton();
 });
 
 document.getElementById('open-viewer').addEventListener('click', () => {
@@ -828,15 +1178,18 @@ async function loadFile(file) {
   importedMode = true;
   const samlCount = captures.length;
   statusEl.textContent = `Imported: ${networkEntries.length} request${networkEntries.length !== 1 ? 's' : ''}${samlCount ? `, ${samlCount} SAML` : ''}`;
+  syncErrorsButton();
   setView('network');
 }
 
 // --- live updates ---
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (!msg || importedMode) return;
+  if (!msg) return;
+  if (msg.type === 'set-view') { setView(msg.view); return; }
+  if (importedMode) return;
   if (msg.type === 'capture-added' && viewMode === 'saml') refresh();
-  if (msg.type === 'network-added' && viewMode === 'network') refreshNetwork();
+  if (msg.type === 'network-added' && (viewMode === 'network' || viewMode === 'errors')) refreshNetwork();
 });
 
 // --- helpers ---
@@ -865,4 +1218,10 @@ function escape(s) {
   }[c]));
 }
 
-loadSettings().then(() => refresh());
+initResizer(document.getElementById('resizer'), document.querySelector('.entry-pane'), 'popup-pane-width');
+
+loadSettings().then(() => {
+  const hash = location.hash.slice(1);
+  if (hash === 'jwt') setView('jwt');
+  else refresh();
+});
