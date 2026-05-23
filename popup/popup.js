@@ -17,7 +17,7 @@ let searchQuery = '';
 // --- settings ---
 
 async function loadSettings() {
-  const data = await chrome.storage.sync.get('settings').catch(() => ({}));
+  const data = await chrome.storage.local.get('settings').catch(() => ({}));
   const raw = data.settings || {};
   settings = {
     highlightDomains:   raw.highlightDomains   || [],
@@ -72,10 +72,11 @@ document.getElementById('settings-save').addEventListener('click', async () => {
   settings.importantHeaders   = settingHeadersEl.value.split('\n').map(s => s.trim()).filter(Boolean);
   settings.queryParamPatterns = settingQsPatternsEl.value.split('\n').map(s => s.trim()).filter(Boolean);
   settings.urlExtractions     = parseUrlExtractions(settingUrlExtractionsEl.value);
-  await chrome.storage.sync.set({ settings });
+  await chrome.storage.local.set({ settings }).catch(() => {});
   settingsPanel.classList.add('hidden');
   updateInfoBar([], [], null, null);
-  if (viewMode === 'saml') renderSamlList(); else renderNetworkList();
+  if (viewMode === 'saml') refresh();
+  else if (viewMode === 'network' || viewMode === 'errors') refreshNetwork();
 });
 
 document.getElementById('settings-cancel').addEventListener('click', () => {

@@ -31,7 +31,7 @@ export async function decodeSamlMessage(encoded) {
 export function summarizeSaml(xml) {
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   const root = doc.documentElement;
-  if (!root || root.getElementsByTagName('parsererror').length) {
+  if (!root || root.localName === 'parsererror' || root.getElementsByTagName('parsererror').length) {
     return { kind: 'unknown', error: 'Failed to parse XML' };
   }
   const ns = {
