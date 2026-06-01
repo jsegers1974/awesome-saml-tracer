@@ -61,6 +61,18 @@ export function summarizeSaml(xml) {
       .filter(v => v != null && v !== '')
   }));
 
+  // Three-way detection for maximum IdP compatibility:
+  // 1. Root itself is EncryptedAssertion (edge case)
+  // 2. Wildcard NS search by local name (handles any saml: prefix variant)
+  // 3. xenc:EncryptedData presence as final fallback (some IdPs omit the EncryptedAssertion wrapper)
+  const xenc = 'http://www.w3.org/2001/04/xmlenc#';
+  const assertionEncrypted =
+    root.localName === 'EncryptedAssertion' ||
+    root.getElementsByTagNameNS('*', 'EncryptedAssertion').length > 0 ||
+    root.getElementsByTagNameNS(xenc, 'EncryptedData').length > 0;
+  const encryptedAttributeCount =
+    root.getElementsByTagNameNS('*', 'EncryptedAttribute').length;
+
   const conditionsEl = first(root, ns.saml, 'Conditions');
   const conditions = conditionsEl ? {
     notBefore: conditionsEl.getAttribute('NotBefore'),
@@ -76,6 +88,8 @@ export function summarizeSaml(xml) {
     destination,
     status,
     subject,
+    assertionEncrypted,
+    encryptedAttributeCount,
     attributes,
     conditions
   };

@@ -86,9 +86,10 @@ function renderDetail(c, s, xml, encoding) {
         ${row('Status', s.status)}
         ${row('Issued', s.issueInstant)}
         ${row('Encoding', encoding)}
+        ${s.assertionEncrypted ? row('Assertion', 'Encrypted') : ''}
       </dl>
     </div>`;
-  const attrs = renderAttributes(s.attributes || []);
+  const attrs = renderAttributes(s);
   const conds = s.conditions ? `
     <h3>Conditions</h3>
     <dl class="detail-head" style="display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin-bottom:16px;">
@@ -103,7 +104,14 @@ function renderDetail(c, s, xml, encoding) {
     </details>`;
 }
 
-function renderAttributes(attrs) {
+function renderAttributes(s) {
+  const attrs = s.attributes || [];
+  if (s.assertionEncrypted) {
+    return '<p class="empty">Assertion is encrypted — attributes cannot be decoded without the SP&#39;s private key.</p>';
+  }
+  if (s.encryptedAttributeCount && !attrs.length) {
+    return `<p class="empty">${s.encryptedAttributeCount} attribute${s.encryptedAttributeCount === 1 ? '' : 's'} are individually encrypted — cannot be decoded without the SP&#39;s private key.</p>`;
+  }
   if (!attrs.length) return '<p class="empty">No SAML attributes in this message.</p>';
   const rows = attrs.map(a => `
     <tr>
@@ -113,12 +121,15 @@ function renderAttributes(attrs) {
         ? a.values.map(v => `<div>${escape(v)}</div>`).join('')
         : '<span class="muted">(no values)</span>'}</td>
     </tr>`).join('');
+  const encNote = s.encryptedAttributeCount
+    ? `<p class="empty" style="margin-top:8px;">${s.encryptedAttributeCount} additional attribute${s.encryptedAttributeCount === 1 ? '' : 's'} are encrypted and not shown.</p>`
+    : '';
   return `
     <h3 style="margin-top:16px;">Attributes (${attrs.length})</h3>
     <table class="attrs">
       <thead><tr><th>Friendly</th><th>Name</th><th>Value</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>${encNote}`;
 }
 
 function shortName(name) {
