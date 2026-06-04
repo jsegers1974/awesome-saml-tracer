@@ -311,11 +311,12 @@ function renderSamlList() {
     const isHighlight = matchesHighlight(c.url);
     li.className = ['entry', isHighlight ? 'is-highlight' : '', c.id === selectedId ? 'selected' : ''].filter(Boolean).join(' ');
     const time = new Date(c.timestamp).toLocaleTimeString();
-    const what = c.samlResponse ? 'SAMLResponse' : 'SAMLRequest';
+    const isAuthn = !!c.samlRequest;
+    const what = c.samlResponse ? 'SAMLResponse' : 'AuthnRequest';
     li.innerHTML = `
       <div class="row">
         <span class="method ${methodClass(c.method)}">${escape(c.method)}</span>
-        <span class="kind">${what}</span>
+        <span class="${isAuthn ? 'kind-authn' : 'kind'}">${what}</span>
         ${isHighlight ? '<span class="kind-domain">★</span>' : ''}
         <span class="time">${time}</span>
       </div>
@@ -393,7 +394,7 @@ function renderNetworkList() {
     return;
   }
   for (const entry of visible) {
-    const samlCapture = captures.find(c => c.requestId === entry.requestId);
+    const samlCapture = captures.find(c => c.requestId === entry.requestId && c.url === entry.url);
     const isError = entry.statusCode >= 400;
     const isSaml = !!samlCapture;
     const isHighlight = matchesHighlight(entry.url);
@@ -416,7 +417,7 @@ function renderNetworkList() {
       <div class="row">
         <span class="method ${methodClass(entry.method)}">${escape(entry.method)}</span>
         <span class="status-badge ${statusClass}">${entry.statusCode}</span>
-        ${isSaml ? `<span class="kind">${samlCapture.samlResponse ? 'SAMLResponse' : 'SAMLRequest'}</span>` : ''}
+        ${isSaml ? `<span class="${samlCapture.samlResponse ? 'kind' : 'kind-authn'}">${samlCapture.samlResponse ? 'SAMLResponse' : 'AuthnRequest'}</span>` : ''}
         ${isHighlight ? '<span class="kind-domain">★</span>' : ''}
         <span class="time">${time}</span>
       </div>

@@ -40,11 +40,12 @@ function renderList() {
     const li = document.createElement('li');
     li.className = 'entry' + (c.id === selectedId ? ' selected' : '');
     const time = new Date(c.timestamp).toLocaleTimeString();
-    const what = c.samlResponse ? 'SAMLResponse' : 'SAMLRequest';
+    const isAuthn = !!c.samlRequest;
+    const what = c.samlResponse ? 'SAMLResponse' : 'AuthnRequest';
     li.innerHTML = `
       <div class="row">
         <span class="method">${escape(c.method)}</span>
-        <span class="kind">${what}</span>
+        <span class="${isAuthn ? 'kind-authn' : 'kind'}">${what}</span>
         <span class="time">${time}</span>
       </div>
       <div class="url">${escape(truncate(c.url, 140))}</div>

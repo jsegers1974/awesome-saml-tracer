@@ -175,6 +175,7 @@ code {
   .method-delete { color: #fb923c; }
 }
 .entry .kind { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.entry .kind-authn { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: rgba(22,163,74,.12); color: #16a34a; }
 .entry .time { color: var(--fg-muted); margin-left: auto; font-size: 11px; }
 .detail { overflow: auto; padding: 16px 20px; flex: 1; min-width: 0; position: relative; }
 .detail-copy-btn {
@@ -438,6 +439,7 @@ details.raw pre {
 @media (prefers-color-scheme: dark) {
   .entry.is-highlight { border-left-color: #fbbf24; }
   .kind-domain { color: #fbbf24; background: rgba(251,191,36,.12); }
+  .entry .kind-authn { color: #4ade80; background: rgba(74,222,128,.10); }
 }
 
 /* ---------- Drop overlay ---------- */
