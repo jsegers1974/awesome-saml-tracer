@@ -1,5 +1,5 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
-import { escape, row, shortName, renderAttributes } from '../shared/render.js';
+import { escape, row, shortName, renderAttributes, renderConditions } from '../shared/render.js';
 
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file');
@@ -169,13 +169,7 @@ function renderCard(entry, payload, s, xml, encoding) {
       </dl>
     </div>`;
   const attrs = renderAttributes(s);
-  const conds = s.conditions ? `
-    <h3>Conditions</h3>
-    <dl class="detail-head" style="display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin-bottom:12px;">
-      ${row('NotBefore', s.conditions.notBefore)}
-      ${row('NotOnOrAfter', s.conditions.notOnOrAfter)}
-      ${row('Audience', s.conditions.audience)}
-    </dl>` : '';
+  const conds = renderConditions(s);
   return head + attrs + conds + `
     <details class="raw">
       <summary>Raw XML</summary>
