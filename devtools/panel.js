@@ -1,5 +1,5 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
-import { escape, row, shortName, truncate, renderAttributes } from '../shared/render.js';
+import { escape, row, shortName, truncate, renderAttributes, renderConditions } from '../shared/render.js';
 import { initResizer } from '../shared/resizer.js';
 
 const tabId = chrome.devtools.inspectedWindow.tabId;
@@ -92,13 +92,7 @@ function renderDetail(c, s, xml, encoding) {
       </dl>
     </div>`;
   const attrs = renderAttributes(s);
-  const conds = s.conditions ? `
-    <h3>Conditions</h3>
-    <dl class="detail-head" style="display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin-bottom:16px;">
-      ${row('NotBefore', s.conditions.notBefore)}
-      ${row('NotOnOrAfter', s.conditions.notOnOrAfter)}
-      ${row('Audience', s.conditions.audience)}
-    </dl>` : '';
+  const conds = renderConditions(s);
   return head + attrs + conds + `
     <details class="raw">
       <summary>Raw XML</summary>
