@@ -1,5 +1,5 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
-import { escape, row, shortName, renderAttributes, renderConditions } from '../shared/render.js';
+import { escape, renderSamlDetail } from '../shared/render.js';
 
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file');
@@ -102,7 +102,11 @@ async function renderEntries(filename, entries) {
         ({ xml, encoding } = await decodeSamlMessage(payload.value));
       }
       const summary = summarizeSaml(xml);
-      card.innerHTML = renderCard(entry, payload, summary, xml, encoding);
+      const url = entry.url || entry.requestUrl || '';
+      const time = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '';
+      card.innerHTML = renderSamlDetail(summary, xml, encoding, {
+        url, time, sourceLabel: payload.source, kindFallback: payload.kind,
+      });
     } catch (err) {
       card.innerHTML = `<p class="error">Decode failed: ${escape(err.message)}</p>`;
     }
@@ -148,32 +152,5 @@ function extractSamlPayload(entry) {
   if (entry.samlResponse) return { kind: 'SAMLResponse', value: entry.samlResponse, source: 'field' };
   if (entry.samlRequest) return { kind: 'SAMLRequest', value: entry.samlRequest, source: 'field' };
   return null;
-}
-
-function renderCard(entry, payload, s, xml, encoding) {
-  const time = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '';
-  const url = entry.url || entry.requestUrl || '';
-  const head = `
-    <div class="detail-head">
-      <h2>${escape(s.kind || payload.kind)} <span class="muted" style="font-weight:400;font-size:12px;">${escape(payload.source)}</span></h2>
-      <dl>
-        ${row('Time', time)}
-        ${row('URL', url)}
-        ${row('Issuer', s.issuer)}
-        ${row('Destination', s.destination)}
-        ${row('Subject', s.subject)}
-        ${row('Status', s.status)}
-        ${row('Issued', s.issueInstant)}
-        ${row('Encoding', encoding)}
-        ${s.assertionEncrypted ? row('Assertion', 'Encrypted') : ''}
-      </dl>
-    </div>`;
-  const attrs = renderAttributes(s);
-  const conds = renderConditions(s);
-  return head + attrs + conds + `
-    <details class="raw">
-      <summary>Raw XML</summary>
-      <pre>${escape(prettyPrintXml(xml))}</pre>
-    </details>`;
 }
 
