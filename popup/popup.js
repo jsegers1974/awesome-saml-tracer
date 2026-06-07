@@ -97,6 +97,25 @@ function matchesQueryPattern(url) {
   return settings.queryParamPatterns.some(p => matchesPattern(url, p));
 }
 
+// Collect query params from both the real query string and any query string
+// embedded in the fragment. Hash-routed SPAs put params after the # (e.g.
+// .../disclaimers/#/?ssoId=...&spaceId=...), where URL.searchParams can't see
+// them. Real query params win on key collision (pushed first).
+function collectQueryParams(url) {
+  const out = [];
+  try {
+    const u = new URL(url);
+    for (const [k, v] of u.searchParams.entries()) out.push([k, v]);
+    const q = u.hash.indexOf('?');
+    if (q !== -1) {
+      for (const [k, v] of new URLSearchParams(u.hash.slice(q + 1)).entries()) {
+        out.push([k, v]);
+      }
+    }
+  } catch { /* invalid URL */ }
+  return out;
+}
+
 function lastPathSegment(url) {
   try {
     const parts = new URL(url).pathname.split('/').filter(Boolean);
@@ -123,10 +142,7 @@ function updateInfoBar(requestHeaders, responseHeaders, samlCapture, url) {
   // Section 2: query string params when URL matches a pattern
   let qsResults = [];
   if (url && matchesQueryPattern(url)) {
-    try {
-      const params = [...new URL(url).searchParams.entries()];
-      qsResults = params.map(([k, v]) => ({ name: k, value: v }));
-    } catch { /* invalid URL */ }
+    qsResults = collectQueryParams(url).map(([k, v]) => ({ name: k, value: v }));
   }
 
   // Section 3: URL path extractions
