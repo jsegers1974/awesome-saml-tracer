@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { escape, row, shortName, truncate, renderAttributes } from '../shared/render.js';
+import { escape, row, shortName, truncate, renderAttributes, renderConditions } from '../shared/render.js';
 
 describe('escape', () => {
   test('escapes the five HTML-significant characters', () => {
@@ -142,5 +142,36 @@ describe('renderAttributes', () => {
     });
     assert.match(out, /&lt;script&gt;/);
     assert.doesNotMatch(out, /<script>/);
+  });
+});
+
+describe('renderConditions', () => {
+  test('returns empty string when there are no conditions', () => {
+    assert.equal(renderConditions({}), '');
+    assert.equal(renderConditions({ conditions: null }), '');
+  });
+
+  test('renders the present condition fields', () => {
+    const out = renderConditions({
+      conditions: {
+        notBefore: '2026-06-04T00:00:00Z',
+        notOnOrAfter: '2026-06-04T01:00:00Z',
+        audience: 'https://sp.example.com',
+      },
+    });
+    assert.match(out, /<h3>Conditions<\/h3>/);
+    assert.match(out, /NotBefore/);
+    assert.match(out, /2026-06-04T00:00:00Z/);
+    assert.match(out, /NotOnOrAfter/);
+    assert.match(out, /Audience/);
+    assert.match(out, /https:\/\/sp\.example\.com/);
+    assert.match(out, /margin-bottom:16px/);
+  });
+
+  test('omits rows for absent condition fields', () => {
+    const out = renderConditions({ conditions: { notBefore: '2026-06-04T00:00:00Z' } });
+    assert.match(out, /NotBefore/);
+    assert.doesNotMatch(out, /NotOnOrAfter/);
+    assert.doesNotMatch(out, /Audience/);
   });
 });

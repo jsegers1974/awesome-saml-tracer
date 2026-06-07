@@ -60,3 +60,15 @@ export function renderAttributes(s) {
       <tbody>${rows}</tbody>
     </table>${encNote}`;
 }
+
+/** The Conditions section, or empty string when the summary has no conditions. */
+export function renderConditions(s) {
+  if (!s.conditions) return '';
+  return `
+    <h3>Conditions</h3>
+    <dl class="detail-head" style="display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin-bottom:16px;">
+      ${row('NotBefore', s.conditions.notBefore)}
+      ${row('NotOnOrAfter', s.conditions.notOnOrAfter)}
+      ${row('Audience', s.conditions.audience)}
+    </dl>`;
+}
