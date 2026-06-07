@@ -1,6 +1,9 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { escape, row, shortName, truncate, renderAttributes, renderConditions } from '../shared/render.js';
+import {
+  escape, row, shortName, truncate,
+  renderAttributes, renderConditions, renderSamlParams, renderHeaderTable,
+} from '../shared/render.js';
 
 describe('escape', () => {
   test('escapes the five HTML-significant characters', () => {
@@ -173,5 +176,63 @@ describe('renderConditions', () => {
     assert.match(out, /NotBefore/);
     assert.doesNotMatch(out, /NotOnOrAfter/);
     assert.doesNotMatch(out, /Audience/);
+  });
+});
+
+describe('renderSamlParams', () => {
+  test('returns empty string when there are no params', () => {
+    assert.equal(renderSamlParams({}), '');
+  });
+
+  test('renders RelayState and a truncated SAMLResponse blob', () => {
+    const blob = 'A'.repeat(200);
+    const out = renderSamlParams({ relayState: 'state123', samlResponse: blob, source: 'form' });
+    assert.match(out, /RelayState/);
+    assert.match(out, /state123/);
+    assert.match(out, /SAMLResponse/);
+    // blob is previewed (first 64 chars), not shown in full
+    assert.match(out, /A{64}…/);
+    assert.doesNotMatch(out, new RegExp('A{100}'));
+  });
+
+  test('labels POST binding when source is not url', () => {
+    const out = renderSamlParams({ samlResponse: 'x', source: 'form' });
+    assert.match(out, /POST binding/);
+  });
+
+  test('labels Redirect binding when source is url', () => {
+    const out = renderSamlParams({ samlRequest: 'x', source: 'url' });
+    assert.match(out, /Redirect binding/);
+    assert.match(out, /SAMLRequest/);
+  });
+
+  test('omits RelayState row when absent', () => {
+    const out = renderSamlParams({ samlResponse: 'x', source: 'form' });
+    assert.doesNotMatch(out, /RelayState/);
+  });
+});
+
+describe('renderHeaderTable', () => {
+  test('returns empty string for missing or empty headers', () => {
+    assert.equal(renderHeaderTable('Request Headers', null), '');
+    assert.equal(renderHeaderTable('Request Headers', []), '');
+  });
+
+  test('renders the label and a row per header', () => {
+    const out = renderHeaderTable('Request Headers', [
+      { name: 'Content-Type', value: 'application/x-www-form-urlencoded' },
+      { name: 'Host', value: 'idp.example.com' },
+    ]);
+    assert.match(out, /Request Headers/);
+    assert.match(out, /Content-Type/);
+    assert.match(out, /application\/x-www-form-urlencoded/);
+    assert.match(out, /Host/);
+    assert.match(out, /idp\.example\.com/);
+  });
+
+  test('escapes header names and values', () => {
+    const out = renderHeaderTable('H', [{ name: '<n>', value: '<v>' }]);
+    assert.match(out, /&lt;n&gt;/);
+    assert.match(out, /&lt;v&gt;/);
   });
 });
