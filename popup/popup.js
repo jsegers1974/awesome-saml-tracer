@@ -2,8 +2,7 @@ import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml
 import { decodeJwt } from '../shared/jwt.js';
 import {
   escape, row, shortName, truncate,
-  renderAttributes, renderConditions, renderSamlParams, renderHeaderTable,
-  renderSamlDetail,
+  renderHeaderTable, renderSamlDetail,
 } from '../shared/render.js';
 import { initResizer } from '../shared/resizer.js';
 

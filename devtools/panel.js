@@ -1,4 +1,4 @@
-import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
+import { decodeSamlMessage, summarizeSaml } from '../shared/saml.js';
 import { escape, truncate, renderSamlDetail } from '../shared/render.js';
 import { initResizer } from '../shared/resizer.js';
 

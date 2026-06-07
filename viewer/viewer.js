@@ -1,4 +1,4 @@
-import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
+import { decodeSamlMessage, summarizeSaml } from '../shared/saml.js';
 import { escape, renderSamlDetail } from '../shared/render.js';
 
 const dropzone = document.getElementById('dropzone');
