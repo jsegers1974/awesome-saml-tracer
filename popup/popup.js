@@ -1,5 +1,9 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
 import { decodeJwt } from '../shared/jwt.js';
+import {
+  escape, row, shortName, truncate,
+  renderHeaderTable, renderSamlDetail,
+} from '../shared/render.js';
 import { initResizer } from '../shared/resizer.js';
 
 const entriesEl = document.getElementById('entries');
@@ -359,7 +363,7 @@ async function selectSamlCapture(id) {
   try {
     const { xml, encoding } = await decodeSamlMessage(encoded);
     const summary = summarizeSaml(xml);
-    detailEl.innerHTML = renderSamlDetail(c, summary, xml, encoding, netEntry);
+    detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: c.url, params: c, networkEntry: netEntry });
     addCopyButton(() => buildSamlCaptureText(c, summary, xml, encoding, netEntry));
   } catch (e) {
     detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
@@ -458,7 +462,7 @@ async function selectNetworkEntry(id, samlCapture) {
     try {
       const { xml, encoding } = await decodeSamlMessage(encoded);
       const summary = summarizeSaml(xml);
-      detailEl.innerHTML = renderSamlDetail(samlCapture, summary, xml, encoding, entry);
+      detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: samlCapture.url, params: samlCapture, networkEntry: entry });
       addCopyButton(() => buildSamlCaptureText(samlCapture, summary, xml, encoding, entry));
     } catch (e) {
       detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
@@ -482,104 +486,6 @@ async function selectNetworkEntry(id, samlCapture) {
   addCopyButton(() => buildNetworkEntryText(entry));
 }
 
-// --- shared detail renderers ---
-
-function renderSamlDetail(c, s, xml, encoding, networkEntry) {
-  const head = `
-    <div class="detail-head">
-      <h2>${escape(s.kind || 'Unknown')}</h2>
-      <dl>
-        ${row('URL', c.url)}
-        ${row('Issuer', s.issuer)}
-        ${row('Destination', s.destination)}
-        ${row('Subject', s.subject)}
-        ${row('Status', s.status)}
-        ${row('Issued', s.issueInstant)}
-        ${row('Encoding', encoding)}
-        ${s.assertionEncrypted ? row('Assertion', 'Encrypted') : ''}
-      </dl>
-    </div>`;
-  const attrs = renderAttributes(s);
-  const conds = s.conditions ? `
-    <h3>Conditions</h3>
-    <dl class="detail-head" style="display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin-bottom:16px;">
-      ${row('NotBefore', s.conditions.notBefore)}
-      ${row('NotOnOrAfter', s.conditions.notOnOrAfter)}
-      ${row('Audience', s.conditions.audience)}
-    </dl>` : '';
-  const params = renderSamlParams(c);
-  const headers = networkEntry ? (
-    renderHeaderTable('Request Headers', networkEntry.requestHeaders) +
-    renderHeaderTable('Response Headers', networkEntry.responseHeaders)
-  ) : '';
-  return head + attrs + conds + params + headers + `
-    <details class="raw">
-      <summary>Raw XML</summary>
-      <pre>${escape(prettyPrintXml(xml))}</pre>
-    </details>`;
-}
-
-function renderAttributes(s) {
-  const attrs = s.attributes || [];
-  if (s.assertionEncrypted) {
-    return '<p class="empty">Assertion is encrypted — attributes cannot be decoded without the SP&#39;s private key.</p>';
-  }
-  if (s.encryptedAttributeCount && !attrs.length) {
-    return `<p class="empty">${s.encryptedAttributeCount} attribute${s.encryptedAttributeCount === 1 ? '' : 's'} are individually encrypted — cannot be decoded without the SP&#39;s private key.</p>`;
-  }
-  if (!attrs.length) return '<p class="empty">No SAML attributes in this message.</p>';
-  const rows = attrs.map(a => `
-    <tr>
-      <td><code>${escape(a.friendlyName || shortName(a.name))}</code></td>
-      <td><code class="muted">${escape(a.name || '')}</code></td>
-      <td>${a.values.length
-        ? a.values.map(v => `<div>${escape(v)}</div>`).join('')
-        : '<span class="muted">(no values)</span>'}</td>
-    </tr>`).join('');
-  const encNote = s.encryptedAttributeCount
-    ? `<p class="empty" style="margin-top:8px;">${s.encryptedAttributeCount} additional attribute${s.encryptedAttributeCount === 1 ? '' : 's'} are encrypted and not shown.</p>`
-    : '';
-  return `
-    <h3 style="margin-top:16px;">Attributes (${attrs.length})</h3>
-    <table class="attrs">
-      <thead><tr><th>Friendly</th><th>Name</th><th>Value</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>${encNote}`;
-}
-
-function renderSamlParams(c) {
-  const pairs = [];
-  if (c.relayState) pairs.push(['RelayState', c.relayState]);
-  const samlKey = c.samlResponse ? 'SAMLResponse' : 'SAMLRequest';
-  const samlVal = c.samlResponse || c.samlRequest;
-  if (samlVal) pairs.push([samlKey, samlVal]);
-  if (!pairs.length) return '';
-  const binding = c.source === 'url' ? 'Redirect binding' : 'POST binding';
-  const rows = pairs.map(([k, v]) => {
-    const isBlob = k === 'SAMLResponse' || k === 'SAMLRequest';
-    const display = isBlob
-      ? `<span class="muted">${escape(v.slice(0, 64))}…</span>`
-      : escape(v);
-    return `<tr><td><code>${escape(k)}</code></td><td>${display}</td></tr>`;
-  }).join('');
-  return `
-    <h3 style="margin-top:16px;">Parameters <span class="muted" style="font-weight:normal;font-size:.85em;">(${binding})</span></h3>
-    <table class="attrs">
-      <tbody>${rows}</tbody>
-    </table>`;
-}
-
-function renderHeaderTable(label, headers) {
-  if (!headers || !headers.length) return '';
-  const rows = headers.map(h =>
-    `<tr><td><code>${escape(h.name)}</code></td><td>${escape(h.value)}</td></tr>`
-  ).join('');
-  return `
-    <h3 style="margin-top:16px;">${escape(label)}</h3>
-    <table class="attrs">
-      <tbody>${rows}</tbody>
-    </table>`;
-}
 
 // --- action buttons ---
 
@@ -1223,15 +1129,6 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 // --- helpers ---
 
-function shortName(name) {
-  if (!name) return '';
-  const m = name.match(/[/#:]([^/#:]+)$/);
-  return m ? m[1] : name;
-}
-function row(label, value) {
-  if (value == null || value === '') return '';
-  return `<dt>${escape(label)}</dt><dd>${escape(String(value))}</dd>`;
-}
 function methodClass(m) { return 'method-' + (m || '').toLowerCase(); }
 function matchesSearch(url, method, extra) {
   if (!searchQuery) return true;
@@ -1239,12 +1136,6 @@ function matchesSearch(url, method, extra) {
   return (url || '').toLowerCase().includes(q) ||
     (method || '').toLowerCase().includes(q) ||
     (extra || '').toLowerCase().includes(q);
-}
-function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
-function escape(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
 }
 
 initResizer(document.getElementById('resizer'), document.querySelector('.entry-pane'), 'popup-pane-width');

@@ -1,4 +1,5 @@
-import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
+import { decodeSamlMessage, summarizeSaml } from '../shared/saml.js';
+import { escape, truncate, renderSamlDetail } from '../shared/render.js';
 import { initResizer } from '../shared/resizer.js';
 
 const tabId = chrome.devtools.inspectedWindow.tabId;
@@ -69,84 +70,10 @@ async function selectCapture(id) {
   try {
     const { xml, encoding } = await decodeSamlMessage(encoded);
     const summary = summarizeSaml(xml);
-    detailEl.innerHTML = renderDetail(c, summary, xml, encoding);
+    detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: c.url });
   } catch (e) {
     detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
   }
-}
-
-function renderDetail(c, s, xml, encoding) {
-  const head = `
-    <div class="detail-head">
-      <h2>${escape(s.kind || 'Unknown')}</h2>
-      <dl>
-        ${row('URL', c.url)}
-        ${row('Issuer', s.issuer)}
-        ${row('Destination', s.destination)}
-        ${row('Subject', s.subject)}
-        ${row('Status', s.status)}
-        ${row('Issued', s.issueInstant)}
-        ${row('Encoding', encoding)}
-        ${s.assertionEncrypted ? row('Assertion', 'Encrypted') : ''}
-      </dl>
-    </div>`;
-  const attrs = renderAttributes(s);
-  const conds = s.conditions ? `
-    <h3>Conditions</h3>
-    <dl class="detail-head" style="display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin-bottom:16px;">
-      ${row('NotBefore', s.conditions.notBefore)}
-      ${row('NotOnOrAfter', s.conditions.notOnOrAfter)}
-      ${row('Audience', s.conditions.audience)}
-    </dl>` : '';
-  return head + attrs + conds + `
-    <details class="raw">
-      <summary>Raw XML</summary>
-      <pre>${escape(prettyPrintXml(xml))}</pre>
-    </details>`;
-}
-
-function renderAttributes(s) {
-  const attrs = s.attributes || [];
-  if (s.assertionEncrypted) {
-    return '<p class="empty">Assertion is encrypted — attributes cannot be decoded without the SP&#39;s private key.</p>';
-  }
-  if (s.encryptedAttributeCount && !attrs.length) {
-    return `<p class="empty">${s.encryptedAttributeCount} attribute${s.encryptedAttributeCount === 1 ? '' : 's'} are individually encrypted — cannot be decoded without the SP&#39;s private key.</p>`;
-  }
-  if (!attrs.length) return '<p class="empty">No SAML attributes in this message.</p>';
-  const rows = attrs.map(a => `
-    <tr>
-      <td><code>${escape(a.friendlyName || shortName(a.name))}</code></td>
-      <td><code class="muted">${escape(a.name || '')}</code></td>
-      <td>${a.values.length
-        ? a.values.map(v => `<div>${escape(v)}</div>`).join('')
-        : '<span class="muted">(no values)</span>'}</td>
-    </tr>`).join('');
-  const encNote = s.encryptedAttributeCount
-    ? `<p class="empty" style="margin-top:8px;">${s.encryptedAttributeCount} additional attribute${s.encryptedAttributeCount === 1 ? '' : 's'} are encrypted and not shown.</p>`
-    : '';
-  return `
-    <h3 style="margin-top:16px;">Attributes (${attrs.length})</h3>
-    <table class="attrs">
-      <thead><tr><th>Friendly</th><th>Name</th><th>Value</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>${encNote}`;
-}
-
-function shortName(name) {
-  if (!name) return '';
-  const m = name.match(/[/#:]([^/#:]+)$/);
-  return m ? m[1] : name;
-}
-function row(label, value) {
-  if (value == null || value === '') return '';
-  return `<dt>${escape(label)}</dt><dd>${escape(String(value))}</dd>`;
-}
-function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
-function escape(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
 }
 
 document.getElementById('clear').addEventListener('click', async () => {
