@@ -1,6 +1,9 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
 import { decodeJwt } from '../shared/jwt.js';
-import { escape, row, shortName, truncate, renderAttributes, renderConditions } from '../shared/render.js';
+import {
+  escape, row, shortName, truncate,
+  renderAttributes, renderConditions, renderSamlParams, renderHeaderTable,
+} from '../shared/render.js';
 import { initResizer } from '../shared/resizer.js';
 
 const entriesEl = document.getElementById('entries');
@@ -496,40 +499,6 @@ function renderSamlDetail(c, s, xml, encoding, networkEntry) {
       <summary>Raw XML</summary>
       <pre>${escape(prettyPrintXml(xml))}</pre>
     </details>`;
-}
-
-function renderSamlParams(c) {
-  const pairs = [];
-  if (c.relayState) pairs.push(['RelayState', c.relayState]);
-  const samlKey = c.samlResponse ? 'SAMLResponse' : 'SAMLRequest';
-  const samlVal = c.samlResponse || c.samlRequest;
-  if (samlVal) pairs.push([samlKey, samlVal]);
-  if (!pairs.length) return '';
-  const binding = c.source === 'url' ? 'Redirect binding' : 'POST binding';
-  const rows = pairs.map(([k, v]) => {
-    const isBlob = k === 'SAMLResponse' || k === 'SAMLRequest';
-    const display = isBlob
-      ? `<span class="muted">${escape(v.slice(0, 64))}…</span>`
-      : escape(v);
-    return `<tr><td><code>${escape(k)}</code></td><td>${display}</td></tr>`;
-  }).join('');
-  return `
-    <h3 style="margin-top:16px;">Parameters <span class="muted" style="font-weight:normal;font-size:.85em;">(${binding})</span></h3>
-    <table class="attrs">
-      <tbody>${rows}</tbody>
-    </table>`;
-}
-
-function renderHeaderTable(label, headers) {
-  if (!headers || !headers.length) return '';
-  const rows = headers.map(h =>
-    `<tr><td><code>${escape(h.name)}</code></td><td>${escape(h.value)}</td></tr>`
-  ).join('');
-  return `
-    <h3 style="margin-top:16px;">${escape(label)}</h3>
-    <table class="attrs">
-      <tbody>${rows}</tbody>
-    </table>`;
 }
 
 // --- action buttons ---
