@@ -67,7 +67,11 @@ code {
   font-size: 18px;
   padding: 4px 8px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.icon-btn svg { width: 16px; height: 16px; display: block; }
 
 /* Custom fast tooltip */
 [data-tooltip] { position: relative; }

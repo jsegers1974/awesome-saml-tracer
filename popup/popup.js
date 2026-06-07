@@ -4,7 +4,25 @@ import {
   escape, row, shortName, truncate,
   renderHeaderTable, renderSamlDetail,
 } from '../shared/render.js';
+import { ICONS } from '../shared/icons.js';
 import { initResizer } from '../shared/resizer.js';
+
+// Populate the static header buttons with their inline SVG icons. The pause
+// button is intentionally left out — applyPausedState() sets it (play vs pause)
+// and runs on load via the get-paused sync.
+const HEADER_ICONS = {
+  clear: 'trash-2',
+  export: 'download',
+  'open-viewer': 'upload',
+  'share-report': 'file-text',
+  'settings-btn': 'settings',
+  'site-btn': 'globe',
+  'kofi-btn': 'coffee',
+};
+for (const [id, name] of Object.entries(HEADER_ICONS)) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = ICONS[name];
+}
 
 const entriesEl = document.getElementById('entries');
 const detailEl = document.getElementById('detail');
@@ -171,7 +189,7 @@ function updateInfoBar(requestHeaders, responseHeaders, samlCapture, url) {
       html += `<div class="info-chip">
         <span class="info-chip-name">${escape(name)}</span>
         <span class="info-chip-value${value === null ? ' empty' : ''}">${value !== null ? escape(value) : '—'}</span>
-        ${value !== null ? '<button class="info-chip-copy" title="Copy to clipboard">⧉</button>' : ''}
+        ${value !== null ? `<button class="info-chip-copy" title="Copy to clipboard">${ICONS.copy}</button>` : ''}
       </div>`;
     }
   }
@@ -184,7 +202,7 @@ function updateInfoBar(requestHeaders, responseHeaders, samlCapture, url) {
       html += `<div class="info-chip">
         <span class="info-chip-name">${escape(name)}</span>
         <span class="info-chip-value">${escape(value)}</span>
-        <button class="info-chip-copy" title="Copy to clipboard">⧉</button>
+        <button class="info-chip-copy" title="Copy to clipboard">${ICONS.copy}</button>
       </div>`;
     }
   }
@@ -196,7 +214,7 @@ function updateInfoBar(requestHeaders, responseHeaders, samlCapture, url) {
       html += `<div class="info-chip">
         <span class="info-chip-name">${escape(label)}</span>
         <span class="info-chip-value">${escape(value)}</span>
-        <button class="info-chip-copy" title="Copy to clipboard">⧉</button>
+        <button class="info-chip-copy" title="Copy to clipboard">${ICONS.copy}</button>
       </div>`;
     }
   }
@@ -208,8 +226,8 @@ function updateInfoBar(requestHeaders, responseHeaders, samlCapture, url) {
     btn.addEventListener('click', () => {
       navigator.clipboard.writeText(raw).catch(() => {});
       btn.classList.add('copied');
-      btn.textContent = '✓';
-      setTimeout(() => { btn.textContent = '⧉'; btn.classList.remove('copied'); }, 1500);
+      btn.innerHTML = ICONS.check;
+      setTimeout(() => { btn.innerHTML = ICONS.copy; btn.classList.remove('copied'); }, 1500);
     });
   });
 }
@@ -228,7 +246,7 @@ searchEl.addEventListener('input', () => {
 const pauseBtn = document.getElementById('pause');
 
 function applyPausedState(paused) {
-  pauseBtn.textContent = paused ? '▶' : '⏸';
+  pauseBtn.innerHTML = paused ? ICONS.play : ICONS.pause;
   pauseBtn.dataset.tooltip = paused ? 'Resume' : 'Pause';
   pauseBtn.classList.toggle('paused', paused);
   pauseBtn.classList.toggle('ghost', !paused);
@@ -823,7 +841,7 @@ function showReportBanner(downloadId, filename) {
   banner.innerHTML = `
     <span class="report-banner-msg">Report saved: <strong>${escape(filename)}</strong></span>
     <button id="report-show-folder">Show in Folder</button>
-    <button class="report-banner-dismiss" id="report-dismiss" title="Dismiss">✕</button>
+    <button class="report-banner-dismiss" id="report-dismiss" title="Dismiss">${ICONS.x}</button>
   `;
   banner.classList.remove('hidden');
   document.getElementById('report-show-folder').addEventListener('click', () => {
@@ -920,6 +938,10 @@ function addCopyButton(getText) {
 
 document.getElementById('kofi-btn').addEventListener('click', () => {
   chrome.tabs.create({ url: 'https://ko-fi.com/samldev' });
+});
+
+document.getElementById('site-btn').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'https://ast-web.pages.dev/' });
 });
 
 document.getElementById('share-report').addEventListener('click', generateHtmlReport);
