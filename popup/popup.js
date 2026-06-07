@@ -1,5 +1,6 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
 import { decodeJwt } from '../shared/jwt.js';
+import { escape, row, shortName, truncate } from '../shared/render.js';
 import { initResizer } from '../shared/resizer.js';
 
 const entriesEl = document.getElementById('entries');
@@ -1207,15 +1208,6 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 // --- helpers ---
 
-function shortName(name) {
-  if (!name) return '';
-  const m = name.match(/[/#:]([^/#:]+)$/);
-  return m ? m[1] : name;
-}
-function row(label, value) {
-  if (value == null || value === '') return '';
-  return `<dt>${escape(label)}</dt><dd>${escape(String(value))}</dd>`;
-}
 function methodClass(m) { return 'method-' + (m || '').toLowerCase(); }
 function matchesSearch(url, method, extra) {
   if (!searchQuery) return true;
@@ -1223,12 +1215,6 @@ function matchesSearch(url, method, extra) {
   return (url || '').toLowerCase().includes(q) ||
     (method || '').toLowerCase().includes(q) ||
     (extra || '').toLowerCase().includes(q);
-}
-function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
-function escape(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
 }
 
 initResizer(document.getElementById('resizer'), document.querySelector('.entry-pane'), 'popup-pane-width');
