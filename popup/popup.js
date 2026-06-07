@@ -3,6 +3,7 @@ import { decodeJwt } from '../shared/jwt.js';
 import {
   escape, row, shortName, truncate,
   renderAttributes, renderConditions, renderSamlParams, renderHeaderTable,
+  renderSamlDetail,
 } from '../shared/render.js';
 import { initResizer } from '../shared/resizer.js';
 
@@ -347,7 +348,7 @@ async function selectSamlCapture(id) {
   try {
     const { xml, encoding } = await decodeSamlMessage(encoded);
     const summary = summarizeSaml(xml);
-    detailEl.innerHTML = renderSamlDetail(c, summary, xml, encoding, netEntry);
+    detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: c.url, params: c, networkEntry: netEntry });
     addCopyButton(() => buildSamlCaptureText(c, summary, xml, encoding, netEntry));
   } catch (e) {
     detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
@@ -446,7 +447,7 @@ async function selectNetworkEntry(id, samlCapture) {
     try {
       const { xml, encoding } = await decodeSamlMessage(encoded);
       const summary = summarizeSaml(xml);
-      detailEl.innerHTML = renderSamlDetail(samlCapture, summary, xml, encoding, entry);
+      detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: samlCapture.url, params: samlCapture, networkEntry: entry });
       addCopyButton(() => buildSamlCaptureText(samlCapture, summary, xml, encoding, entry));
     } catch (e) {
       detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
@@ -470,36 +471,6 @@ async function selectNetworkEntry(id, samlCapture) {
   addCopyButton(() => buildNetworkEntryText(entry));
 }
 
-// --- shared detail renderers ---
-
-function renderSamlDetail(c, s, xml, encoding, networkEntry) {
-  const head = `
-    <div class="detail-head">
-      <h2>${escape(s.kind || 'Unknown')}</h2>
-      <dl>
-        ${row('URL', c.url)}
-        ${row('Issuer', s.issuer)}
-        ${row('Destination', s.destination)}
-        ${row('Subject', s.subject)}
-        ${row('Status', s.status)}
-        ${row('Issued', s.issueInstant)}
-        ${row('Encoding', encoding)}
-        ${s.assertionEncrypted ? row('Assertion', 'Encrypted') : ''}
-      </dl>
-    </div>`;
-  const attrs = renderAttributes(s);
-  const conds = renderConditions(s);
-  const params = renderSamlParams(c);
-  const headers = networkEntry ? (
-    renderHeaderTable('Request Headers', networkEntry.requestHeaders) +
-    renderHeaderTable('Response Headers', networkEntry.responseHeaders)
-  ) : '';
-  return head + attrs + conds + params + headers + `
-    <details class="raw">
-      <summary>Raw XML</summary>
-      <pre>${escape(prettyPrintXml(xml))}</pre>
-    </details>`;
-}
 
 // --- action buttons ---
 
