@@ -1,5 +1,5 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
-import { escape, row, shortName, truncate, renderAttributes, renderConditions } from '../shared/render.js';
+import { escape, truncate, renderSamlDetail } from '../shared/render.js';
 import { initResizer } from '../shared/resizer.js';
 
 const tabId = chrome.devtools.inspectedWindow.tabId;
@@ -70,36 +70,11 @@ async function selectCapture(id) {
   try {
     const { xml, encoding } = await decodeSamlMessage(encoded);
     const summary = summarizeSaml(xml);
-    detailEl.innerHTML = renderDetail(c, summary, xml, encoding);
+    detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: c.url });
   } catch (e) {
     detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
   }
 }
-
-function renderDetail(c, s, xml, encoding) {
-  const head = `
-    <div class="detail-head">
-      <h2>${escape(s.kind || 'Unknown')}</h2>
-      <dl>
-        ${row('URL', c.url)}
-        ${row('Issuer', s.issuer)}
-        ${row('Destination', s.destination)}
-        ${row('Subject', s.subject)}
-        ${row('Status', s.status)}
-        ${row('Issued', s.issueInstant)}
-        ${row('Encoding', encoding)}
-        ${s.assertionEncrypted ? row('Assertion', 'Encrypted') : ''}
-      </dl>
-    </div>`;
-  const attrs = renderAttributes(s);
-  const conds = renderConditions(s);
-  return head + attrs + conds + `
-    <details class="raw">
-      <summary>Raw XML</summary>
-      <pre>${escape(prettyPrintXml(xml))}</pre>
-    </details>`;
-}
-
 
 document.getElementById('clear').addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: 'clear-captures' });
