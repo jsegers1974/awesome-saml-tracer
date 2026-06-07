@@ -2,9 +2,27 @@ import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml
 import { decodeJwt } from '../shared/jwt.js';
 import {
   escape, row, shortName, truncate,
-  renderHeaderTable, renderSamlDetail,
+  renderHeaderTable, renderSamlDetail, renderSettingHelp,
 } from '../shared/render.js';
+import { ICONS } from '../shared/icons.js';
 import { initResizer } from '../shared/resizer.js';
+
+// Populate the static header buttons with their inline SVG icons. The pause
+// button is intentionally left out — applyPausedState() sets it (play vs pause)
+// and runs on load via the get-paused sync.
+const HEADER_ICONS = {
+  clear: 'trash-2',
+  export: 'download',
+  'open-viewer': 'upload',
+  'share-report': 'file-text',
+  'settings-btn': 'settings',
+  'site-btn': 'globe',
+  'kofi-btn': 'coffee',
+};
+for (const [id, name] of Object.entries(HEADER_ICONS)) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = ICONS[name];
+}
 
 const entriesEl = document.getElementById('entries');
 const detailEl = document.getElementById('detail');
@@ -69,6 +87,7 @@ document.getElementById('settings-btn').addEventListener('click', () => {
     settingUrlExtractionsEl.value = urlExtractionsToText(settings.urlExtractions);
   }
   settingsPanel.classList.toggle('hidden', !opening);
+  if (!opening) closeHelp();
 });
 
 document.getElementById('settings-save').addEventListener('click', async () => {
@@ -78,6 +97,7 @@ document.getElementById('settings-save').addEventListener('click', async () => {
   settings.urlExtractions     = parseUrlExtractions(settingUrlExtractionsEl.value);
   await chrome.storage.local.set({ settings }).catch(() => {});
   settingsPanel.classList.add('hidden');
+  closeHelp();
   updateInfoBar([], [], null, null);
   if (viewMode === 'saml') refresh();
   else if (viewMode === 'network' || viewMode === 'errors') refreshNetwork();
@@ -85,7 +105,73 @@ document.getElementById('settings-save').addEventListener('click', async () => {
 
 document.getElementById('settings-cancel').addEventListener('click', () => {
   settingsPanel.classList.add('hidden');
+  closeHelp();
 });
+
+// --- per-setting help popover ---
+
+const DOCS_URL = 'https://ast-web.pages.dev/how-to#settings';
+
+const SETTING_HELP = {
+  'setting-domains': {
+    title: 'Highlight domains',
+    examples: ['*mycompany.com', '*okta.com'],
+    note: 'One pattern per line. Matching captures get a ★ and a highlight in the list.',
+  },
+  'setting-headers': {
+    title: 'Important Headers / Parameters',
+    examples: ['X-Global-Transaction-Id', 'RelayState', 'SAMLResponse'],
+    note: 'Header or SAML parameter names (one per line) pinned to the info bar when present.',
+  },
+  'setting-qs-patterns': {
+    title: 'Show query params for',
+    examples: ['*myapp*', '*mycompany.com/api*'],
+    note: 'When the URL matches, all query-string params are shown — including ones after the # fragment.',
+  },
+  'setting-url-extractions': {
+    title: 'Extract from URL path',
+    examples: ['Config ID | *myapp*', 'Tenant | *tenants/*/config*'],
+    note: 'Format: label | pattern. Extracts the last path segment when the URL matches.',
+  },
+};
+
+const helpPopover = document.getElementById('help-popover');
+let helpOpenFor = null;
+
+function closeHelp() {
+  helpPopover.classList.add('hidden');
+  helpOpenFor = null;
+}
+
+function openHelp(trigger) {
+  const id = trigger.dataset.help;
+  const content = SETTING_HELP[id];
+  if (!content) return;
+  helpPopover.innerHTML = renderSettingHelp(content, DOCS_URL);
+  helpPopover.classList.remove('hidden');
+  // Position below the trigger, clamped to the viewport's right edge.
+  const r = trigger.getBoundingClientRect();
+  const width = helpPopover.offsetWidth || 260;
+  const left = Math.min(r.left, window.innerWidth - width - 8);
+  helpPopover.style.top = `${r.bottom + 6}px`;
+  helpPopover.style.left = `${Math.max(8, left)}px`;
+  helpOpenFor = id;
+}
+
+document.querySelectorAll('.help-trigger').forEach(trigger => {
+  trigger.innerHTML = ICONS['circle-help'];
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (helpOpenFor === trigger.dataset.help) closeHelp();
+    else openHelp(trigger);
+  });
+});
+
+document.addEventListener('click', (e) => {
+  if (helpOpenFor === null) return;
+  if (!helpPopover.contains(e.target) && !e.target.closest('.help-trigger')) closeHelp();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeHelp(); });
 
 // --- important info bar ---
 
@@ -171,7 +257,7 @@ function updateInfoBar(requestHeaders, responseHeaders, samlCapture, url) {
       html += `<div class="info-chip">
         <span class="info-chip-name">${escape(name)}</span>
         <span class="info-chip-value${value === null ? ' empty' : ''}">${value !== null ? escape(value) : '—'}</span>
-        ${value !== null ? '<button class="info-chip-copy" title="Copy to clipboard">⧉</button>' : ''}
+        ${value !== null ? `<button class="info-chip-copy" title="Copy to clipboard">${ICONS.copy}</button>` : ''}
       </div>`;
     }
   }
@@ -184,7 +270,7 @@ function updateInfoBar(requestHeaders, responseHeaders, samlCapture, url) {
       html += `<div class="info-chip">
         <span class="info-chip-name">${escape(name)}</span>
         <span class="info-chip-value">${escape(value)}</span>
-        <button class="info-chip-copy" title="Copy to clipboard">⧉</button>
+        <button class="info-chip-copy" title="Copy to clipboard">${ICONS.copy}</button>
       </div>`;
     }
   }
@@ -196,7 +282,7 @@ function updateInfoBar(requestHeaders, responseHeaders, samlCapture, url) {
       html += `<div class="info-chip">
         <span class="info-chip-name">${escape(label)}</span>
         <span class="info-chip-value">${escape(value)}</span>
-        <button class="info-chip-copy" title="Copy to clipboard">⧉</button>
+        <button class="info-chip-copy" title="Copy to clipboard">${ICONS.copy}</button>
       </div>`;
     }
   }
@@ -208,8 +294,8 @@ function updateInfoBar(requestHeaders, responseHeaders, samlCapture, url) {
     btn.addEventListener('click', () => {
       navigator.clipboard.writeText(raw).catch(() => {});
       btn.classList.add('copied');
-      btn.textContent = '✓';
-      setTimeout(() => { btn.textContent = '⧉'; btn.classList.remove('copied'); }, 1500);
+      btn.innerHTML = ICONS.check;
+      setTimeout(() => { btn.innerHTML = ICONS.copy; btn.classList.remove('copied'); }, 1500);
     });
   });
 }
@@ -228,7 +314,7 @@ searchEl.addEventListener('input', () => {
 const pauseBtn = document.getElementById('pause');
 
 function applyPausedState(paused) {
-  pauseBtn.textContent = paused ? '▶' : '⏸';
+  pauseBtn.innerHTML = paused ? ICONS.play : ICONS.pause;
   pauseBtn.dataset.tooltip = paused ? 'Resume' : 'Pause';
   pauseBtn.classList.toggle('paused', paused);
   pauseBtn.classList.toggle('ghost', !paused);
@@ -823,7 +909,7 @@ function showReportBanner(downloadId, filename) {
   banner.innerHTML = `
     <span class="report-banner-msg">Report saved: <strong>${escape(filename)}</strong></span>
     <button id="report-show-folder">Show in Folder</button>
-    <button class="report-banner-dismiss" id="report-dismiss" title="Dismiss">✕</button>
+    <button class="report-banner-dismiss" id="report-dismiss" title="Dismiss">${ICONS.x}</button>
   `;
   banner.classList.remove('hidden');
   document.getElementById('report-show-folder').addEventListener('click', () => {
@@ -920,6 +1006,10 @@ function addCopyButton(getText) {
 
 document.getElementById('kofi-btn').addEventListener('click', () => {
   chrome.tabs.create({ url: 'https://ko-fi.com/samldev' });
+});
+
+document.getElementById('site-btn').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'https://ast-web.pages.dev/' });
 });
 
 document.getElementById('share-report').addEventListener('click', generateHtmlReport);

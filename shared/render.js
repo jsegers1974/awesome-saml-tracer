@@ -4,6 +4,7 @@
 // window, and the drag-and-drop viewer so each rendering concern lives once.
 
 import { prettyPrintXml } from './saml.js';
+import { ICONS } from './icons.js';
 
 /** HTML-escape a value for safe insertion into markup. */
 export function escape(s) {
@@ -158,4 +159,21 @@ export function renderSamlDetail(s, xml, encoding, opts = {}) {
       <summary>Raw XML</summary>
       <pre>${escape(prettyPrintXml(xml))}</pre>
     </details>`;
+}
+
+/**
+ * Inner HTML for a settings help popover. `content` is { title, examples[],
+ * note }; `docsUrl` (optional) appends a "Full docs" external link. Pure
+ * string builder — DOM wiring (open/position/dismiss) lives in the popup.
+ */
+export function renderSettingHelp(content, docsUrl) {
+  const { title, examples = [], note } = content;
+  const exampleList = examples.length
+    ? `<div class="help-examples">${examples.map(e => `<code>${escape(e)}</code>`).join('')}</div>`
+    : '';
+  const noteHtml = note ? `<p class="help-note">${escape(note)}</p>` : '';
+  const docsLink = docsUrl
+    ? `<a class="help-docs-link" href="${escape(docsUrl)}" target="_blank" rel="noopener">Full docs ${ICONS['external-link']}</a>`
+    : '';
+  return `<div class="help-popover-head">${escape(title)}</div>${exampleList}${noteHtml}${docsLink}`;
 }

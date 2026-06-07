@@ -67,7 +67,11 @@ code {
   font-size: 18px;
   padding: 4px 8px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.icon-btn svg { width: 16px; height: 16px; display: block; }
 
 /* Custom fast tooltip */
 [data-tooltip] { position: relative; }
@@ -362,8 +366,52 @@ details.raw pre {
 .settings-panel.hidden { display: none; }
 .settings-grid { display: flex; flex: 1; gap: 16px; flex-wrap: wrap; }
 .settings-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 200px; }
+.settings-field-head { display: flex; align-items: center; gap: 5px; }
 .settings-field label { font-weight: 600; font-size: 12px; }
 .settings-hint { font-size: 11px; }
+
+/* Per-setting help trigger + popover */
+.help-trigger {
+  flex: none;
+  width: 16px; height: 16px;
+  padding: 0; border: none; background: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--fg-muted); cursor: pointer; border-radius: 50%;
+  line-height: 1;
+}
+.help-trigger:hover { color: var(--accent); filter: none; }
+.help-trigger svg { width: 14px; height: 14px; display: block; }
+
+.help-popover {
+  position: fixed;
+  z-index: 60;
+  max-width: 260px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.help-popover.hidden { display: none; }
+.help-popover-head { font-weight: 600; margin-bottom: 6px; }
+.help-examples { display: flex; flex-direction: column; gap: 3px; margin-bottom: 7px; }
+.help-examples code {
+  font: 11px ui-monospace, 'SF Mono', Menlo, monospace;
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  align-self: flex-start;
+}
+.help-note { color: var(--fg-muted); margin: 0 0 8px; }
+.help-docs-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--accent); font-weight: 500; text-decoration: none;
+}
+.help-docs-link:hover { text-decoration: underline; }
+.help-docs-link svg { width: 12px; height: 12px; }
 .settings-panel textarea {
   font: 12px ui-monospace, 'SF Mono', Menlo, monospace;
   background: var(--bg);
