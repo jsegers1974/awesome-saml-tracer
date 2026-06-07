@@ -3,6 +3,8 @@
 // the other shared modules do. Consumed by the devtools panel, the popup app
 // window, and the drag-and-drop viewer so each rendering concern lives once.
 
+import { prettyPrintXml } from './saml.js';
+
 /** HTML-escape a value for safe insertion into markup. */
 export function escape(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -111,4 +113,49 @@ export function renderHeaderTable(label, headers) {
     <table class="attrs">
       <tbody>${rows}</tbody>
     </table>`;
+}
+
+/**
+ * The full SAML detail view, shared by all three surfaces.
+ *
+ * `s` is the summary from summarizeSaml; `xml` the decoded XML; `encoding` the
+ * decode label. Surface-specific content is driven by `opts`:
+ *   - url           string  — the URL row value
+ *   - time          string  — when truthy, a leading Time row (viewer)
+ *   - sourceLabel   string  — when truthy, a muted span in the heading (viewer)
+ *   - kindFallback  string  — heading fallback when s.kind is absent (viewer)
+ *   - params        object  — a capture; when present, the Parameters table (popup)
+ *   - networkEntry  object  — when present, the request/response header tables (popup)
+ */
+export function renderSamlDetail(s, xml, encoding, opts = {}) {
+  const { url, time, sourceLabel, kindFallback, params, networkEntry } = opts;
+  const heading = escape(s.kind || kindFallback || 'Unknown') +
+    (sourceLabel ? ` <span class="muted" style="font-weight:400;font-size:12px;">${escape(sourceLabel)}</span>` : '');
+  const head = `
+    <div class="detail-head">
+      <h2>${heading}</h2>
+      <dl>
+        ${row('Time', time)}
+        ${row('URL', url)}
+        ${row('Issuer', s.issuer)}
+        ${row('Destination', s.destination)}
+        ${row('Subject', s.subject)}
+        ${row('Status', s.status)}
+        ${row('Issued', s.issueInstant)}
+        ${row('Encoding', encoding)}
+        ${s.assertionEncrypted ? row('Assertion', 'Encrypted') : ''}
+      </dl>
+    </div>`;
+  const attrs = renderAttributes(s);
+  const conds = renderConditions(s);
+  const paramsHtml = params ? renderSamlParams(params) : '';
+  const headers = networkEntry ? (
+    renderHeaderTable('Request Headers', networkEntry.requestHeaders) +
+    renderHeaderTable('Response Headers', networkEntry.responseHeaders)
+  ) : '';
+  return head + attrs + conds + paramsHtml + headers + `
+    <details class="raw">
+      <summary>Raw XML</summary>
+      <pre>${escape(prettyPrintXml(xml))}</pre>
+    </details>`;
 }

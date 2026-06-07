@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   escape, row, shortName, truncate,
   renderAttributes, renderConditions, renderSamlParams, renderHeaderTable,
+  renderSamlDetail,
 } from '../shared/render.js';
 
 describe('escape', () => {
@@ -234,5 +235,73 @@ describe('renderHeaderTable', () => {
     const out = renderHeaderTable('H', [{ name: '<n>', value: '<v>' }]);
     assert.match(out, /&lt;n&gt;/);
     assert.match(out, /&lt;v&gt;/);
+  });
+});
+
+describe('renderSamlDetail', () => {
+  const summary = {
+    kind: 'Response',
+    issuer: 'idp.example.com',
+    destination: 'https://sp.example.com/acs',
+    subject: 'user@example.com',
+    status: 'urn:...:Success',
+    issueInstant: '2026-06-04T00:53:14Z',
+    attributes: [{ name: 'http://x/email', friendlyName: 'Email', values: ['user@example.com'] }],
+  };
+  const XML = '<Response><Issuer>idp.example.com</Issuer></Response>';
+
+  test('panel-style: heading, core rows, attributes, and raw XML', () => {
+    const out = renderSamlDetail(summary, XML, 'base64', { url: 'https://sp.example.com/acs' });
+    assert.match(out, /<h2>Response<\/h2>/);
+    assert.match(out, /<dt>URL<\/dt>/);
+    assert.match(out, /<dt>Issuer<\/dt><dd>idp\.example\.com<\/dd>/);
+    assert.match(out, /<dt>Encoding<\/dt><dd>base64<\/dd>/);
+    assert.match(out, /Attributes \(1\)/);
+    assert.match(out, /<summary>Raw XML<\/summary>/);
+    // no Time row, no source span, no params, no headers
+    assert.doesNotMatch(out, /<dt>Time<\/dt>/);
+    assert.doesNotMatch(out, /Parameters/);
+    assert.doesNotMatch(out, /Request Headers/);
+  });
+
+  test('falls back to Unknown when kind and kindFallback are absent', () => {
+    const out = renderSamlDetail({ attributes: [] }, XML, 'base64', { url: 'x' });
+    assert.match(out, /<h2>Unknown<\/h2>/);
+  });
+
+  test('shows the Assertion row only when the assertion is encrypted', () => {
+    const enc = renderSamlDetail({ ...summary, assertionEncrypted: true }, XML, 'base64', { url: 'x' });
+    assert.match(enc, /<dt>Assertion<\/dt><dd>Encrypted<\/dd>/);
+    const plain = renderSamlDetail(summary, XML, 'base64', { url: 'x' });
+    assert.doesNotMatch(plain, /<dt>Assertion<\/dt>/);
+  });
+
+  test('popup-style: includes params table and header tables', () => {
+    const out = renderSamlDetail(summary, XML, 'base64', {
+      url: 'https://sp.example.com/acs',
+      params: { samlResponse: 'BLOB', relayState: 'state1', source: 'form' },
+      networkEntry: {
+        requestHeaders: [{ name: 'Host', value: 'sp.example.com' }],
+        responseHeaders: [{ name: 'Content-Type', value: 'text/html' }],
+      },
+    });
+    assert.match(out, /Parameters/);
+    assert.match(out, /RelayState/);
+    assert.match(out, /Request Headers/);
+    assert.match(out, /Response Headers/);
+    assert.match(out, /Content-Type/);
+  });
+
+  test('viewer-style: leading Time row and source label in heading', () => {
+    const out = renderSamlDetail(summary, XML, 'pre-decoded', {
+      url: 'https://sp.example.com/acs',
+      time: '6/4/2026, 12:53:14 AM',
+      sourceLabel: 'saml-tracer',
+      kindFallback: 'SAMLResponse',
+    });
+    assert.match(out, /<dt>Time<\/dt><dd>6\/4\/2026, 12:53:14 AM<\/dd>/);
+    assert.match(out, /<span class="muted"[^>]*>saml-tracer<\/span>/);
+    // Time row precedes the URL row
+    assert.ok(out.indexOf('<dt>Time</dt>') < out.indexOf('<dt>URL</dt>'));
   });
 });
