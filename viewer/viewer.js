@@ -1,4 +1,5 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
+import { escape, row, shortName } from '../shared/render.js';
 
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file');
@@ -210,17 +211,3 @@ function renderAttributes(s) {
     </table>${encNote}`;
 }
 
-function shortName(name) {
-  if (!name) return '';
-  const m = name.match(/[/#:]([^/#:]+)$/);
-  return m ? m[1] : name;
-}
-function row(label, value) {
-  if (value == null || value === '') return '';
-  return `<dt>${escape(label)}</dt><dd>${escape(String(value))}</dd>`;
-}
-function escape(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-}
