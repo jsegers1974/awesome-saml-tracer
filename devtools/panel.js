@@ -1,4 +1,5 @@
 import { decodeSamlMessage, summarizeSaml, prettyPrintXml } from '../shared/saml.js';
+import { escape, row, shortName, truncate } from '../shared/render.js';
 import { initResizer } from '../shared/resizer.js';
 
 const tabId = chrome.devtools.inspectedWindow.tabId;
@@ -133,21 +134,6 @@ function renderAttributes(s) {
     </table>${encNote}`;
 }
 
-function shortName(name) {
-  if (!name) return '';
-  const m = name.match(/[/#:]([^/#:]+)$/);
-  return m ? m[1] : name;
-}
-function row(label, value) {
-  if (value == null || value === '') return '';
-  return `<dt>${escape(label)}</dt><dd>${escape(String(value))}</dd>`;
-}
-function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
-function escape(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-}
 
 document.getElementById('clear').addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: 'clear-captures' });
