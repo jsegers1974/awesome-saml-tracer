@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   escape, row, shortName, truncate,
   renderAttributes, renderConditions, renderSamlParams, renderHeaderTable,
-  renderSamlDetail,
+  renderSamlDetail, renderSettingHelp,
 } from '../shared/render.js';
 
 describe('escape', () => {
@@ -303,5 +303,49 @@ describe('renderSamlDetail', () => {
     assert.match(out, /<span class="muted"[^>]*>saml-tracer<\/span>/);
     // Time row precedes the URL row
     assert.ok(out.indexOf('<dt>Time</dt>') < out.indexOf('<dt>URL</dt>'));
+  });
+});
+
+describe('renderSettingHelp', () => {
+  const content = {
+    title: 'Highlight domains',
+    examples: ['*mycompany.com', '*okta.com'],
+    note: 'Marks matching captures with a star.',
+  };
+  const DOCS = 'https://ast-web.pages.dev/how-to#settings';
+
+  test('renders the title, examples, and note', () => {
+    const out = renderSettingHelp(content, DOCS);
+    assert.match(out, /Highlight domains/);
+    assert.match(out, /\*mycompany\.com/);
+    assert.match(out, /\*okta\.com/);
+    assert.match(out, /Marks matching captures with a star/);
+  });
+
+  test('includes a docs link to the settings anchor when a url is given', () => {
+    const out = renderSettingHelp(content, DOCS);
+    assert.match(out, /href="https:\/\/ast-web\.pages\.dev\/how-to#settings"/);
+    assert.match(out, /target="_blank"/);
+    assert.match(out, /rel="noopener"/);
+    assert.match(out, /Full docs/);
+  });
+
+  test('omits the docs link when no url is given', () => {
+    const out = renderSettingHelp(content);
+    assert.doesNotMatch(out, /help-docs-link/);
+  });
+
+  test('handles a setting with no examples', () => {
+    const out = renderSettingHelp({ title: 'X', note: 'just a note' }, DOCS);
+    assert.doesNotMatch(out, /help-examples/);
+    assert.match(out, /just a note/);
+  });
+
+  test('escapes example and title content', () => {
+    const out = renderSettingHelp({ title: '<t>', examples: ['<e>'], note: '<n>' }, DOCS);
+    assert.match(out, /&lt;t&gt;/);
+    assert.match(out, /&lt;e&gt;/);
+    assert.match(out, /&lt;n&gt;/);
+    assert.doesNotMatch(out, /<t>/);
   });
 });

@@ -35,22 +35,34 @@
   <div id="settings-panel" class="settings-panel hidden">
     <div class="settings-grid">
       <div class="settings-field">
-        <label for="setting-domains">Highlight domains</label>
+        <div class="settings-field-head">
+          <label for="setting-domains">Highlight domains</label>
+          <button type="button" class="help-trigger" data-help="setting-domains" aria-label="Help for Highlight domains" title="Examples &amp; help"></button>
+        </div>
         <span class="muted settings-hint">One pattern per line — wildcards ok (e.g. *mycompany.com)</span>
         <textarea id="setting-domains" rows="3" placeholder="*mycompany.com&#10;*okta.com"></textarea>
       </div>
       <div class="settings-field">
-        <label for="setting-headers">Important Headers / Parameters</label>
+        <div class="settings-field-head">
+          <label for="setting-headers">Important Headers / Parameters</label>
+          <button type="button" class="help-trigger" data-help="setting-headers" aria-label="Help for Important Headers / Parameters" title="Examples &amp; help"></button>
+        </div>
         <span class="muted settings-hint">Header or SAML parameter names to pin in the info bar (one per line)</span>
         <textarea id="setting-headers" rows="3" placeholder="X-Global-Transaction-Id&#10;RelayState&#10;SAMLResponse"></textarea>
       </div>
       <div class="settings-field">
-        <label for="setting-qs-patterns">Show query params for</label>
+        <div class="settings-field-head">
+          <label for="setting-qs-patterns">Show query params for</label>
+          <button type="button" class="help-trigger" data-help="setting-qs-patterns" aria-label="Help for Show query params for" title="Examples &amp; help"></button>
+        </div>
         <span class="muted settings-hint">Show all query string params in the info bar when URL matches (one pattern per line)</span>
         <textarea id="setting-qs-patterns" rows="3" placeholder="*myapp*&#10;*mycompany.com/api*"></textarea>
       </div>
       <div class="settings-field">
-        <label for="setting-url-extractions">Extract from URL path</label>
+        <div class="settings-field-head">
+          <label for="setting-url-extractions">Extract from URL path</label>
+          <button type="button" class="help-trigger" data-help="setting-url-extractions" aria-label="Help for Extract from URL path" title="Examples &amp; help"></button>
+        </div>
         <span class="muted settings-hint">Label | *pattern* — extracts the last path segment when URL matches</span>
         <textarea id="setting-url-extractions" rows="3" placeholder="Config ID | *myapp*&#10;Tenant | *tenants/*/config*"></textarea>
       </div>
@@ -60,6 +72,7 @@
       <button id="settings-cancel" class="ghost">Cancel</button>
     </div>
   </div>
+  <div id="help-popover" class="help-popover hidden" role="dialog" aria-label="Setting help"></div>
   <div id="info-bar" class="info-bar hidden"></div>
   <div id="main-layout" class="layout">
     <div class="entry-pane">
