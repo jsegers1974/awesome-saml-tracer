@@ -36,7 +36,8 @@ export function summarizeSaml(xml) {
   }
   const ns = {
     samlp: 'urn:oasis:names:tc:SAML:2.0:protocol',
-    saml: 'urn:oasis:names:tc:SAML:2.0:assertion'
+    saml: 'urn:oasis:names:tc:SAML:2.0:assertion',
+    ds: 'http://www.w3.org/2000/09/xmldsig#'
   };
   const first = (parent, uri, local) => {
     const list = parent.getElementsByTagNameNS(uri, local);
@@ -50,7 +51,22 @@ export function summarizeSaml(xml) {
   const issueInstant = root.getAttribute('IssueInstant') || null;
   const status = first(root, ns.samlp, 'StatusCode')?.getAttribute('Value') || null;
   const subjectEl = first(root, ns.saml, 'Subject');
-  const subject = subjectEl ? first(subjectEl, ns.saml, 'NameID')?.textContent?.trim() : null;
+  const nameIdEl = subjectEl ? first(subjectEl, ns.saml, 'NameID') : null;
+  const subject = nameIdEl?.textContent?.trim() || null;
+  const nameIdFormat = nameIdEl?.getAttribute('Format') || null;
+  const recipient = subjectEl
+    ? first(subjectEl, ns.saml, 'SubjectConfirmationData')?.getAttribute('Recipient') || null
+    : null;
+
+  // All audiences (conditions.audience below keeps the first for back-compat).
+  const audiences = all(root, ns.saml, 'Audience')
+    .map(a => a.textContent?.trim())
+    .filter(Boolean);
+
+  // The certificate embedded in the signature (whitespace stripped). Used to
+  // match against IdP metadata. Not a cryptographic signature verification.
+  const certEl = first(root, ns.ds, 'X509Certificate');
+  const signingCert = certEl ? certEl.textContent.replace(/\s+/g, '') || null : null;
 
   const attributes = all(root, ns.saml, 'Attribute').map(el => ({
     name: el.getAttribute('Name'),
@@ -87,6 +103,10 @@ export function summarizeSaml(xml) {
     destination,
     status,
     subject,
+    nameIdFormat,
+    recipient,
+    audiences,
+    signingCert,
     assertionEncrypted,
     encryptedAttributeCount,
     attributes,
