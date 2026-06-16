@@ -58,6 +58,49 @@ const AUTHN_REQUEST_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <saml:Issuer>https://sp.example.com</saml:Issuer>
 </samlp:AuthnRequest>`;
 
+// A richer, signed response with the fields MetaCompare needs: a NameID Format,
+// a SubjectConfirmationData Recipient, two Audiences, and a ds:Signature whose
+// X509Certificate is split across whitespace (to test stripping).
+const SAML_RESPONSE_RICH_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
+  xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
+  xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+  ID="_response2" Version="2.0"
+  IssueInstant="2024-01-01T00:00:00Z"
+  Destination="https://sp.example.com/acs">
+  <saml:Issuer>https://idp.example.com</saml:Issuer>
+  <samlp:Status>
+    <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/>
+  </samlp:Status>
+  <saml:Assertion ID="_assert2" Version="2.0" IssueInstant="2024-01-01T00:00:00Z">
+    <saml:Issuer>https://idp.example.com</saml:Issuer>
+    <ds:Signature>
+      <ds:SignedInfo/>
+      <ds:SignatureValue>SIGVALUE</ds:SignatureValue>
+      <ds:KeyInfo>
+        <ds:X509Data>
+          <ds:X509Certificate>
+            MIIDmockCERT
+            base64DATA==
+          </ds:X509Certificate>
+        </ds:X509Data>
+      </ds:KeyInfo>
+    </ds:Signature>
+    <saml:Subject>
+      <saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">user@example.com</saml:NameID>
+      <saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
+        <saml:SubjectConfirmationData Recipient="https://sp.example.com/acs" NotOnOrAfter="2024-01-01T01:00:00Z"/>
+      </saml:SubjectConfirmation>
+    </saml:Subject>
+    <saml:Conditions NotBefore="2024-01-01T00:00:00Z" NotOnOrAfter="2024-01-01T01:00:00Z">
+      <saml:AudienceRestriction>
+        <saml:Audience>https://sp.example.com</saml:Audience>
+        <saml:Audience>https://sp2.example.com</saml:Audience>
+      </saml:AudienceRestriction>
+    </saml:Conditions>
+  </saml:Assertion>
+</samlp:Response>`;
+
 const POST_ENCODED    = Buffer.from(SAML_RESPONSE_XML).toString('base64');
 const URLENC_ENCODED  = encodeURIComponent(POST_ENCODED);
 
@@ -243,6 +286,46 @@ describe('summarizeSaml', () => {
     test('returns error kind on empty string', () => {
       const result = summarizeSaml('');
       assert.equal(result.kind, 'unknown');
+    });
+  });
+
+  describe('comparison fields (for MetaCompare)', () => {
+    let rich, simple;
+    before(() => {
+      rich = summarizeSaml(SAML_RESPONSE_RICH_XML);
+      simple = summarizeSaml(SAML_RESPONSE_XML);
+    });
+
+    test('extracts the SubjectConfirmationData Recipient', () => {
+      assert.equal(rich.recipient, 'https://sp.example.com/acs');
+    });
+
+    test('recipient is null when absent', () => {
+      assert.equal(simple.recipient, null);
+    });
+
+    test('extracts the NameID Format', () => {
+      assert.equal(rich.nameIdFormat, 'urn:oasis:names:tc:SAML:2.0:nameid-format:persistent');
+    });
+
+    test('extracts all Audiences as an array', () => {
+      assert.deepEqual(rich.audiences, ['https://sp.example.com', 'https://sp2.example.com']);
+    });
+
+    test('conditions.audience stays the first audience (back-compat)', () => {
+      assert.equal(rich.conditions.audience, 'https://sp.example.com');
+    });
+
+    test('single-audience response yields a one-element array', () => {
+      assert.deepEqual(simple.audiences, ['https://sp.example.com']);
+    });
+
+    test('extracts the signing certificate with whitespace stripped', () => {
+      assert.equal(rich.signingCert, 'MIIDmockCERTbase64DATA==');
+    });
+
+    test('signingCert is null when the assertion is unsigned', () => {
+      assert.equal(simple.signingCert, null);
     });
   });
 
