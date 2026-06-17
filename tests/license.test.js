@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { isLicenseValid, LICENSE_TTL_MS } from '../shared/license.js';
+import { isLicenseValid, LICENSE_TTL_MS, isBetaCodeValid, BETA_CODES } from '../shared/license.js';
 
 const NOW = 1_700_000_000_000;
 
@@ -29,5 +29,24 @@ describe('isLicenseValid', () => {
 
   test('false once the TTL has elapsed', () => {
     assert.equal(isLicenseValid({ valid: true, checkedAt: NOW - (LICENSE_TTL_MS + 1000) }, NOW), false);
+  });
+});
+
+describe('isBetaCodeValid', () => {
+  const VALID = BETA_CODES[0];
+
+  test('accepts a known code', () => {
+    assert.equal(isBetaCodeValid(VALID), true);
+  });
+
+  test('is case-insensitive and trims whitespace', () => {
+    assert.equal(isBetaCodeValid(`  ${VALID.toLowerCase()}  `), true);
+  });
+
+  test('rejects an unknown or empty code', () => {
+    assert.equal(isBetaCodeValid('NOPE'), false);
+    assert.equal(isBetaCodeValid(''), false);
+    assert.equal(isBetaCodeValid(null), false);
+    assert.equal(isBetaCodeValid(undefined), false);
   });
 });
