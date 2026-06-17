@@ -443,6 +443,18 @@ details.raw pre {
 }
 .settings-footer { display: flex; flex-direction: column; gap: 6px; padding-bottom: 2px; }
 
+/* Beta Pro unlock (settings) */
+.settings-beta { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 4px; padding-top: 10px; border-top: 1px solid var(--border); }
+.settings-beta label { font-weight: 600; font-size: 12px; }
+.beta-row { display: flex; gap: 6px; align-items: center; }
+.beta-row input {
+  flex: 1; min-width: 0;
+  font: 12px ui-monospace, 'SF Mono', Menlo, monospace;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px;
+}
+#beta-status { color: var(--ok, #1a7f37); }
+
 /* ---------- Important info bar ---------- */
 .info-bar {
   display: flex;

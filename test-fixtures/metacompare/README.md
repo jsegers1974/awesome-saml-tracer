@@ -24,11 +24,12 @@ ACS `https://sp.local/acs`, NameID format emailAddress, and releases `email` + `
 
 ## How to test (≈2 minutes)
 
-1. **Unlock Pro locally** (MetaCompare is gated): in `shared/license.js` set
-   `DEV_UNLOCK_PRO = true` — *or* run this in an extension page's DevTools console:
-   ```js
-   chrome.storage.local.set({ license: { valid: true, checkedAt: Date.now() } })
-   ```
+1. **Unlock Pro** (MetaCompare is gated). Any of:
+   - **Beta code** (how testers do it): open the popup → **Settings** → *Pro access* →
+     enter the beta code (default `AST-BETA-2026`, see `BETA_CODES` in
+     `shared/license.js`) → **Activate**. Persists on the device, no expiry.
+   - **Dev flag:** set `DEV_UNLOCK_PRO = true` in `shared/license.js` (revert before release).
+   - **Console:** `chrome.storage.local.set({ license: { valid: true, checkedAt: Date.now() } })`.
 2. Reload the extension at `chrome://extensions`, then open the **popup** (toolbar icon).
 3. **Import the capture:** click **Import** (or drag `capture.json` onto the window).
    The capture appears in **All Traffic** / **SAML**.
