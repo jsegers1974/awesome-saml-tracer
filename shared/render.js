@@ -209,8 +209,8 @@ export function renderMetaCompare(result) {
         ${c.hint && c.status !== 'match' ? `<div class="mc-hint">${escape(c.hint)}</div>` : ''}
       </td>
     </tr>`).join('');
+  // No heading here — the surrounding UI owns the titled bar (with Add/Clear).
   return `
-    <h3 style="margin-top:16px;">MetaCompare</h3>
     ${summary}
     <table class="attrs mc-table">
       <thead><tr><th></th><th>Check</th><th>Expected</th><th>Actual</th></tr></thead>

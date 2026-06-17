@@ -412,6 +412,25 @@ details.raw pre {
 }
 .help-docs-link:hover { text-decoration: underline; }
 .help-docs-link svg { width: 12px; height: 12px; }
+
+/* ---------- MetaCompare (Pro) ---------- */
+.mc-section { margin-top: 16px; }
+.mc-bar { display: flex; align-items: center; gap: 10px; }
+.mc-bar h3 { margin: 0; }
+.mc-bar-actions { margin-left: auto; display: flex; gap: 6px; }
+.mc-summary { font-size: 12px; color: var(--fg-muted); margin: 6px 0; }
+.mc-table td { vertical-align: top; }
+.mc-table .mc-icon { width: 22px; text-align: center; padding-right: 0; }
+.mc-table .mc-icon svg { width: 15px; height: 15px; display: inline-block; vertical-align: -2px; }
+.mc-dash { color: var(--fg-muted); }
+.mc-hint { font-size: 11px; color: var(--fg-muted); margin-top: 3px; }
+/* Status row accents (left border + tint), theme-token based */
+.mc-row.mc-match   .mc-icon { color: var(--ok, #1a7f37); }
+.mc-row.mc-mismatch { background: rgba(197, 34, 31, 0.06); }
+.mc-row.mc-mismatch .mc-icon { color: var(--error); }
+.mc-row.mc-missing  { background: rgba(154, 103, 0, 0.06); }
+.mc-row.mc-missing  .mc-icon { color: var(--warn, #9a6700); }
+.mc-row.mc-unknown  .mc-icon { color: var(--fg-muted); }
 .settings-panel textarea {
   font: 12px ui-monospace, 'SF Mono', Menlo, monospace;
   background: var(--bg);

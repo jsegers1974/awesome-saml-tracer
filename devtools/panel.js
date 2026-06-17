@@ -1,5 +1,6 @@
 import { decodeSamlMessage, summarizeSaml } from '../shared/saml.js';
 import { escape, truncate, renderSamlDetail } from '../shared/render.js';
+import { mountMetaCompare } from '../shared/metacompare-ui.js';
 import { initResizer } from '../shared/resizer.js';
 
 const tabId = chrome.devtools.inspectedWindow.tabId;
@@ -71,6 +72,9 @@ async function selectCapture(id) {
     const { xml, encoding } = await decodeSamlMessage(encoded);
     const summary = summarizeSaml(xml);
     detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: c.url });
+    const mc = document.createElement('div');
+    detailEl.appendChild(mc);
+    mountMetaCompare(mc, summary).catch(() => {});
   } catch (e) {
     detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
   }

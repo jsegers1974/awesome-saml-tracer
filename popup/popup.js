@@ -5,7 +5,15 @@ import {
   renderHeaderTable, renderSamlDetail, renderSettingHelp,
 } from '../shared/render.js';
 import { ICONS } from '../shared/icons.js';
+import { mountMetaCompare } from '../shared/metacompare-ui.js';
 import { initResizer } from '../shared/resizer.js';
+
+// Append the Pro MetaCompare section under a freshly-rendered SAML detail.
+function appendMetaCompare(summary) {
+  const container = document.createElement('div');
+  detailEl.appendChild(container);
+  mountMetaCompare(container, summary).catch(() => {});
+}
 
 // Populate the static header buttons with their inline SVG icons. The pause
 // button is intentionally left out — applyPausedState() sets it (play vs pause)
@@ -451,6 +459,7 @@ async function selectSamlCapture(id) {
     const summary = summarizeSaml(xml);
     detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: c.url, params: c, networkEntry: netEntry });
     addCopyButton(() => buildSamlCaptureText(c, summary, xml, encoding, netEntry));
+    appendMetaCompare(summary);
   } catch (e) {
     detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
   }
@@ -550,6 +559,7 @@ async function selectNetworkEntry(id, samlCapture) {
       const summary = summarizeSaml(xml);
       detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: samlCapture.url, params: samlCapture, networkEntry: entry });
       addCopyButton(() => buildSamlCaptureText(samlCapture, summary, xml, encoding, entry));
+      appendMetaCompare(summary);
     } catch (e) {
       detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
     }
