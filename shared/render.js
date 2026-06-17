@@ -177,3 +177,43 @@ export function renderSettingHelp(content, docsUrl) {
     : '';
   return `<div class="help-popover-head">${escape(title)}</div>${exampleList}${noteHtml}${docsLink}`;
 }
+
+const MC_ICON = {
+  match: ICONS.check,
+  mismatch: ICONS['alert-triangle'],
+  missing: ICONS.x,
+  unknown: '<span class="mc-dash">–</span>',
+};
+
+/**
+ * The MetaCompare results table. `result` is { checks, summary } from
+ * metaCompare(). Pure string builder; status drives the row color via
+ * the mc-<status> class.
+ */
+export function renderMetaCompare(result) {
+  const checks = result?.checks || [];
+  if (!checks.length) {
+    return '<p class="empty">Nothing to compare yet — add metadata for this SSO.</p>';
+  }
+  const s = result.summary || {};
+  const summary =
+    `<p class="mc-summary">${s.matches || 0} matched · ${s.mismatches || 0} mismatched · ` +
+    `${s.missing || 0} missing · ${s.unknown || 0} not checked</p>`;
+  const rows = checks.map(c => `
+    <tr class="mc-row mc-${escape(c.status)}">
+      <td class="mc-icon">${MC_ICON[c.status] || ''}</td>
+      <td>${escape(c.label)}</td>
+      <td><code class="muted">${escape(c.expected ?? '—')}</code></td>
+      <td>
+        <code>${escape(c.actual ?? '—')}</code>
+        ${c.hint && c.status !== 'match' ? `<div class="mc-hint">${escape(c.hint)}</div>` : ''}
+      </td>
+    </tr>`).join('');
+  return `
+    <h3 style="margin-top:16px;">MetaCompare</h3>
+    ${summary}
+    <table class="attrs mc-table">
+      <thead><tr><th></th><th>Check</th><th>Expected</th><th>Actual</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}

@@ -6,7 +6,7 @@ import { ICONS } from '../shared/icons.js';
 const REQUIRED = [
   'pause', 'play', 'trash-2', 'download', 'upload', 'file-text',
   'settings', 'globe', 'coffee', 'copy', 'check', 'x',
-  'circle-help', 'external-link',
+  'circle-help', 'external-link', 'alert-triangle',
 ];
 
 describe('ICONS', () => {
