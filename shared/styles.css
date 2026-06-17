@@ -553,6 +553,22 @@ details.raw pre {
   .report-banner { background: #1a7f37; }
 }
 
+/* ---------- Review nudge banner ---------- */
+.review-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: var(--accent-soft);
+  color: var(--fg);
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.review-banner.hidden { display: none; }
+.review-banner-msg { flex: 1; }
+.review-banner button { font-size: 12px; padding: 3px 10px; }
+
 /* ---------- Network view entries ---------- */
 .entry.is-error { color: var(--error); }
 .entry.is-error .url { color: var(--error); opacity: 0.75; }
