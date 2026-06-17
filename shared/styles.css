@@ -554,20 +554,33 @@ details.raw pre {
 }
 
 /* ---------- Review nudge banner ---------- */
+/* Warm/gold treatment so it stands out against the otherwise-blue UI and
+   reads as a "rating" prompt rather than blending in. */
 .review-banner {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 12px;
-  background: var(--accent-soft);
+  padding: 9px 12px;
+  background: rgba(245, 166, 35, 0.16);
   color: var(--fg);
   font-size: 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(245, 166, 35, 0.45);
+  border-left: 3px solid #f5a623;
   flex-shrink: 0;
 }
 .review-banner.hidden { display: none; }
-.review-banner-msg { flex: 1; }
+.review-banner-msg { flex: 1; font-weight: 500; }
+.review-banner-msg::before { content: "★ "; color: #f5a623; }
 .review-banner button { font-size: 12px; padding: 3px 10px; }
+.review-banner #review-rate {
+  background: #f5a623;
+  color: #1d2433;
+  border: 0;
+}
+.review-banner #review-rate:hover { filter: brightness(1.05); }
+@media (prefers-color-scheme: dark) {
+  .review-banner { background: rgba(245, 166, 35, 0.22); }
+}
 
 /* ---------- Network view entries ---------- */
 .entry.is-error { color: var(--error); }

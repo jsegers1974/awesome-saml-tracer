@@ -16,7 +16,7 @@ async function maybeShowReviewNudge() {
   if (!(await shouldShowReviewNudgeNow(captures.length))) return;
   banner.innerHTML = `
     <span class="review-banner-msg">Enjoying Awesome SAML Tracer? A quick rating really helps.</span>
-    <button id="review-rate">Rate it ★</button>
+    <button id="review-rate">Rate it</button>
     <button id="review-dismiss" class="ghost">Maybe later</button>`;
   banner.classList.remove('hidden');
   document.getElementById('review-rate').addEventListener('click', async () => {
