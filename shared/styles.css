@@ -78,7 +78,9 @@ code {
 [data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
-  top: calc(100% + 5px);
+  /* Sit well clear of the mouse pointer — at 5px the cursor (larger on hi-res
+     displays) covered the tooltip. */
+  top: calc(100% + 14px);
   left: 50%;
   transform: translateX(-50%);
   background: var(--fg);
