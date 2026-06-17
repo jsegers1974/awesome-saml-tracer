@@ -572,12 +572,6 @@ details.raw pre {
 .review-banner-msg { flex: 1; font-weight: 500; }
 .review-banner-msg::before { content: "★ "; color: #f5a623; }
 .review-banner button { font-size: 12px; padding: 3px 10px; }
-.review-banner #review-rate {
-  background: #f5a623;
-  color: #1d2433;
-  border: 0;
-}
-.review-banner #review-rate:hover { filter: brightness(1.05); }
 @media (prefers-color-scheme: dark) {
   .review-banner { background: rgba(245, 166, 35, 0.22); }
 }
