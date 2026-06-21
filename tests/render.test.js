@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   escape, row, shortName, truncate,
   renderAttributes, renderConditions, renderSamlParams, renderHeaderTable,
-  renderSamlDetail, renderSettingHelp,
+  renderSamlDetail, renderSettingHelp, renderMetaCompare,
 } from '../shared/render.js';
 
 describe('escape', () => {
@@ -347,5 +347,52 @@ describe('renderSettingHelp', () => {
     assert.match(out, /&lt;e&gt;/);
     assert.match(out, /&lt;n&gt;/);
     assert.doesNotMatch(out, /<t>/);
+  });
+});
+
+describe('renderMetaCompare', () => {
+  const result = {
+    summary: { matches: 1, mismatches: 1, missing: 0, unknown: 1 },
+    checks: [
+      { id: 'issuer', label: 'Issuer', status: 'match', expected: 'idp', actual: 'idp', hint: null },
+      { id: 'signing-cert', label: 'Signing certificate', status: 'mismatch', expected: '1 cert(s)', actual: 'abc…', hint: 'Likely a certificate rotation.' },
+      { id: 'audience', label: 'Audience', status: 'unknown', expected: null, actual: null, hint: 'No SP metadata provided.' },
+    ],
+  };
+
+  test('renders the summary counts', () => {
+    const out = renderMetaCompare(result);
+    assert.match(out, /1 matched/);
+    assert.match(out, /1 mismatched/);
+    assert.match(out, /1 not checked/);
+  });
+
+  test('renders a row per check with status class', () => {
+    const out = renderMetaCompare(result);
+    assert.match(out, /mc-match/);
+    assert.match(out, /mc-mismatch/);
+    assert.match(out, /mc-unknown/);
+    assert.match(out, /Signing certificate/);
+  });
+
+  test('shows the hint for a mismatch but not for a match', () => {
+    const out = renderMetaCompare(result);
+    assert.match(out, /Likely a certificate rotation/);
+    // a matching row carries no hint block
+    assert.doesNotMatch(out, /mc-hint">[^<]*idp/);
+  });
+
+  test('empty result shows an add-metadata prompt', () => {
+    assert.match(renderMetaCompare({ checks: [] }), /add metadata/i);
+    assert.match(renderMetaCompare(null), /add metadata/i);
+  });
+
+  test('escapes check content', () => {
+    const out = renderMetaCompare({ summary: {}, checks: [
+      { id: 'x', label: '<lbl>', status: 'mismatch', expected: '<e>', actual: '<a>', hint: '<h>' },
+    ] });
+    assert.match(out, /&lt;lbl&gt;/);
+    assert.match(out, /&lt;a&gt;/);
+    assert.doesNotMatch(out, /<lbl>/);
   });
 });

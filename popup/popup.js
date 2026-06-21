@@ -5,7 +5,16 @@ import {
   renderHeaderTable, renderSamlDetail, renderSettingHelp,
 } from '../shared/render.js';
 import { ICONS } from '../shared/icons.js';
+import { mountMetaCompare } from '../shared/metacompare-ui.js';
+import { isBetaActive, redeemBetaCode, deactivateBeta } from '../shared/license.js';
 import { initResizer } from '../shared/resizer.js';
+
+// Append the Pro MetaCompare section under a freshly-rendered SAML detail.
+function appendMetaCompare(summary) {
+  const container = document.createElement('div');
+  detailEl.appendChild(container);
+  mountMetaCompare(container, summary).catch(() => {});
+}
 
 // Populate the static header buttons with their inline SVG icons. The pause
 // button is intentionally left out — applyPausedState() sets it (play vs pause)
@@ -88,6 +97,33 @@ document.getElementById('settings-btn').addEventListener('click', () => {
   }
   settingsPanel.classList.toggle('hidden', !opening);
   if (!opening) closeHelp();
+  if (opening) renderBetaStatus();
+});
+
+// --- beta Pro unlock ---
+
+const betaCodeEl = document.getElementById('beta-code');
+const betaActivateBtn = document.getElementById('beta-activate');
+const betaStatusEl = document.getElementById('beta-status');
+
+async function renderBetaStatus() {
+  const active = await isBetaActive();
+  betaStatusEl.textContent = active ? '✓ Pro unlocked on this device (beta).' : '';
+  betaActivateBtn.textContent = active ? 'Deactivate' : 'Activate';
+  betaCodeEl.style.display = active ? 'none' : '';
+}
+
+betaActivateBtn.addEventListener('click', async () => {
+  if (await isBetaActive()) {
+    await deactivateBeta();
+    betaCodeEl.value = '';
+  } else {
+    const ok = await redeemBetaCode(betaCodeEl.value);
+    if (!ok) { betaStatusEl.textContent = 'That code isn’t valid.'; return; }
+  }
+  await renderBetaStatus();
+  // Re-render the open capture so MetaCompare appears/disappears immediately.
+  if (selectedId != null && viewMode === 'saml') refresh();
 });
 
 document.getElementById('settings-save').addEventListener('click', async () => {
@@ -451,6 +487,7 @@ async function selectSamlCapture(id) {
     const summary = summarizeSaml(xml);
     detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: c.url, params: c, networkEntry: netEntry });
     addCopyButton(() => buildSamlCaptureText(c, summary, xml, encoding, netEntry));
+    appendMetaCompare(summary);
   } catch (e) {
     detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
   }
@@ -550,6 +587,7 @@ async function selectNetworkEntry(id, samlCapture) {
       const summary = summarizeSaml(xml);
       detailEl.innerHTML = renderSamlDetail(summary, xml, encoding, { url: samlCapture.url, params: samlCapture, networkEntry: entry });
       addCopyButton(() => buildSamlCaptureText(samlCapture, summary, xml, encoding, entry));
+      appendMetaCompare(summary);
     } catch (e) {
       detailEl.innerHTML = `<p class="error">Failed to decode: ${escape(e.message)}</p>`;
     }

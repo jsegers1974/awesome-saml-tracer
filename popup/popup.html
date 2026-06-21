@@ -67,6 +67,17 @@
         <textarea id="setting-url-extractions" rows="3" placeholder="Config ID | *myapp*&#10;Tenant | *tenants/*/config*"></textarea>
       </div>
     </div>
+    <div class="settings-beta">
+      <div class="settings-field-head">
+        <label for="beta-code">Pro access</label>
+      </div>
+      <span class="muted settings-hint">Have a beta access code? Enter it to unlock Pro features on this device.</span>
+      <div class="beta-row">
+        <input type="text" id="beta-code" placeholder="AST-BETA-XXXX" autocomplete="off" spellcheck="false">
+        <button id="beta-activate" class="ghost">Activate</button>
+      </div>
+      <span id="beta-status" class="muted settings-hint"></span>
+    </div>
     <div class="settings-footer">
       <button id="settings-save">Save</button>
       <button id="settings-cancel" class="ghost">Cancel</button>
