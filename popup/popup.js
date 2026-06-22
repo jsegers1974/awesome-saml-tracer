@@ -7,6 +7,7 @@ import {
 import { ICONS } from '../shared/icons.js';
 import { mountMetaCompare } from '../shared/metacompare-ui.js';
 import { isBetaActive, redeemBetaCode, deactivateBeta } from '../shared/license.js';
+import { shouldShowReviewNudgeNow, markReviewRated, markReviewDismissed, REVIEW_URL } from '../shared/review.js';
 import { initResizer } from '../shared/resizer.js';
 
 // Append the Pro MetaCompare section under a freshly-rendered SAML detail.
@@ -14,6 +15,28 @@ function appendMetaCompare(summary) {
   const container = document.createElement('div');
   detailEl.appendChild(container);
   mountMetaCompare(container, summary).catch(() => {});
+}
+
+// One-time, dismissible "rate the extension" nudge — shown only once the user
+// has accumulated enough live captures to have gotten value from the tool.
+async function maybeShowReviewNudge() {
+  const banner = document.getElementById('review-banner');
+  if (importedMode) { banner.classList.add('hidden'); return; }
+  if (!(await shouldShowReviewNudgeNow(captures.length))) return;
+  banner.innerHTML = `
+    <span class="review-banner-msg">Enjoying Awesome SAML Tracer? A quick rating really helps.</span>
+    <button id="review-rate">Rate it</button>
+    <button id="review-dismiss" class="ghost">Maybe later</button>`;
+  banner.classList.remove('hidden');
+  document.getElementById('review-rate').addEventListener('click', async () => {
+    chrome.tabs.create({ url: REVIEW_URL });
+    await markReviewRated();
+    banner.classList.add('hidden');
+  });
+  document.getElementById('review-dismiss').addEventListener('click', async () => {
+    await markReviewDismissed();
+    banner.classList.add('hidden');
+  });
 }
 
 // Populate the static header buttons with their inline SVG icons. The pause
@@ -420,6 +443,7 @@ async function refresh() {
       : '';
     renderSamlList();
     syncErrorsButton();
+    maybeShowReviewNudge();
     if (selectedId && !captures.find(c => c.id === selectedId)) {
       selectedId = null;
       detailEl.innerHTML = '<p class="empty">Select a SAML capture to inspect.</p>';
